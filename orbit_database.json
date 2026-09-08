@@ -1,6 +1,6 @@
 {
   "app_name": "OrbitTracker",
-  "version": "1.0.0",
+  "version": "1.0.1-dev",
   "last_modified": "2026-09-07 20:29:17",
   "queue_prefix": "Q-",
   "next_queue_id": 4,

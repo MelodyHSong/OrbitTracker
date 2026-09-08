@@ -507,3 +507,279 @@ class ColumnManagerDialog(BaseDialog):
             self.db.remove_custom_column(col_id)
             self.refresh_list()
             self.result = "COLUMNS_CHANGED"
+
+
+class DatabaseInitDialog(BaseDialog):
+    """Modal dialog asking whether to create an empty database or load demo data."""
+    def __init__(self, parent, db_path="orbit_database.json"):
+        super().__init__(parent, title="OrbitTracker — Database Setup")
+        self.db_path = db_path
+        self.result = "empty"
+        center_window_on_parent(self, parent, width=540, height=370)
+        self.build_ui()
+        self.grab_set()
+
+    def build_ui(self):
+        # Header banner
+        header = tk.Frame(self, bg=BG_PANEL, height=52, highlightthickness=1, highlightbackground=BORDER_COLOR)
+        header.pack(fill="x", padx=12, pady=(12, 8))
+        header.pack_propagate(False)
+
+        lbl_title = tk.Label(header, text="🪐 DATABASE INITIALIZATION", font=FONT_TITLE, fg=ACCENT_CYAN, bg=BG_PANEL)
+        lbl_title.pack(side="left", padx=14, pady=10)
+
+        lbl_badge = tk.Label(header, text="NEW SETUP", font=FONT_CODE, fg=ACCENT_GOLD, bg=BG_SURFACE, padx=8, pady=3)
+        lbl_badge.pack(side="right", padx=14, pady=10)
+
+        # Message container
+        msg_frame = tk.Frame(self, bg=BG_MAIN)
+        msg_frame.pack(fill="x", padx=16, pady=(6, 12))
+
+        lbl_prompt = tk.Label(
+            msg_frame,
+            text="Default database was not found at:",
+            font=FONT_LABEL,
+            fg=TEXT_PRIMARY,
+            bg=BG_MAIN
+        )
+        lbl_prompt.pack(anchor="w")
+
+        lbl_path = tk.Label(
+            msg_frame,
+            text=f"📁 {self.db_path}",
+            font=FONT_CODE,
+            fg=ACCENT_GOLD,
+            bg=BG_SURFACE,
+            padx=8,
+            pady=4,
+            anchor="w"
+        )
+        lbl_path.pack(fill="x", pady=(4, 6))
+
+        lbl_question = tk.Label(
+            msg_frame,
+            text="Would you like to populate sample data to explore OrbitTracker, or start with a fresh empty database?",
+            font=FONT_UI,
+            fg=TEXT_MUTED,
+            bg=BG_MAIN,
+            wraplength=500,
+            justify="left"
+        )
+        lbl_question.pack(anchor="w", pady=(0, 4))
+
+        # Choices container
+        choices_frame = tk.Frame(self, bg=BG_MAIN)
+        choices_frame.pack(fill="both", expand=True, padx=16, pady=(0, 12))
+
+        # Option 1: Load Demo
+        card_demo = tk.Frame(choices_frame, bg=BG_PANEL, highlightthickness=1, highlightbackground=BORDER_COLOR)
+        card_demo.pack(fill="x", pady=(0, 8))
+
+        btn_demo = tk.Button(
+            card_demo,
+            text="🪐  Load Demo Database",
+            font=("Segoe UI", 10, "bold"),
+            fg=BG_MAIN,
+            bg=ACCENT_CYAN,
+            activebackground="#79c0ff",
+            relief="flat",
+            padx=14,
+            pady=6,
+            cursor="hand2",
+            command=self.on_load_demo
+        )
+        btn_demo.pack(side="left", padx=12, pady=10)
+
+        lbl_demo_desc = tk.Label(
+            card_demo,
+            text="Loads 3 sample equipment records, service logs, and custom columns.",
+            font=FONT_UI,
+            fg=TEXT_MUTED,
+            bg=BG_PANEL,
+            wraplength=300,
+            justify="left"
+        )
+        lbl_demo_desc.pack(side="left", padx=(0, 10), pady=10)
+
+        # Option 2: Create Empty Database
+        card_empty = tk.Frame(choices_frame, bg=BG_PANEL, highlightthickness=1, highlightbackground=BORDER_COLOR)
+        card_empty.pack(fill="x")
+
+        btn_empty = tk.Button(
+            card_empty,
+            text="✨  Create Empty Database",
+            font=("Segoe UI", 10, "bold"),
+            fg=TEXT_PRIMARY,
+            bg=BG_SURFACE,
+            activebackground=BG_ACTIVE,
+            relief="flat",
+            padx=14,
+            pady=6,
+            cursor="hand2",
+            command=self.on_create_empty
+        )
+        btn_empty.pack(side="left", padx=12, pady=10)
+
+        lbl_empty_desc = tk.Label(
+            card_empty,
+            text="Creates a clean, blank database ready for your own work orders.",
+            font=FONT_UI,
+            fg=TEXT_MUTED,
+            bg=BG_PANEL,
+            wraplength=300,
+            justify="left"
+        )
+        lbl_empty_desc.pack(side="left", padx=(0, 10), pady=10)
+
+        # Default keyboard shortcuts
+        self.bind("<Return>", lambda e: self.on_load_demo())
+        btn_demo.focus_set()
+
+    def on_load_demo(self):
+        self.result = "demo"
+        self.destroy()
+
+    def on_create_empty(self):
+        self.result = "empty"
+        self.destroy()
+
+
+class DeleteDatabaseDialog(BaseDialog):
+    """Modal dialog requiring the user to type 'DELETE DATABASE' to confirm deletion."""
+    def __init__(self, parent, db_path="orbit_database.json"):
+        super().__init__(parent, title="Confirm Database Deletion")
+        self.db_path = db_path
+        self.result = False
+        center_window_on_parent(self, parent, width=540, height=360)
+        self.build_ui()
+        self.grab_set()
+
+    def build_ui(self):
+        # Header banner
+        header = tk.Frame(self, bg=BG_PANEL, height=52, highlightthickness=1, highlightbackground=BORDER_COLOR)
+        header.pack(fill="x", padx=12, pady=(12, 8))
+        header.pack_propagate(False)
+
+        lbl_title = tk.Label(header, text="⚠️ DELETE DATABASE", font=FONT_TITLE, fg=ACCENT_CORAL, bg=BG_PANEL)
+        lbl_title.pack(side="left", padx=14, pady=10)
+
+        lbl_badge = tk.Label(header, text="DANGER", font=FONT_CODE, fg=BG_MAIN, bg=ACCENT_CORAL, padx=8, pady=3)
+        lbl_badge.pack(side="right", padx=14, pady=10)
+
+        # Warning container
+        body = tk.Frame(self, bg=BG_MAIN)
+        body.pack(fill="both", expand=True, padx=16, pady=(4, 8))
+
+        lbl_warn = tk.Label(
+            body,
+            text="Warning: You are about to permanently delete this database file from disk:",
+            font=FONT_LABEL,
+            fg=TEXT_PRIMARY,
+            bg=BG_MAIN,
+            wraplength=500,
+            justify="left"
+        )
+        lbl_warn.pack(anchor="w", pady=(0, 4))
+
+        lbl_path = tk.Label(
+            body,
+            text=f"📁 {self.db_path}",
+            font=FONT_CODE,
+            fg=ACCENT_GOLD,
+            bg=BG_SURFACE,
+            padx=8,
+            pady=4,
+            anchor="w"
+        )
+        lbl_path.pack(fill="x", pady=(0, 6))
+
+        lbl_info = tk.Label(
+            body,
+            text="All work items, service logs, and custom columns in this file will be permanently erased. This action cannot be undone.\n\nTo confirm, type \"DELETE DATABASE\" below:",
+            font=FONT_UI,
+            fg=TEXT_MUTED,
+            bg=BG_MAIN,
+            wraplength=500,
+            justify="left"
+        )
+        lbl_info.pack(anchor="w", pady=(0, 6))
+
+        # Entry box
+        self.entry_confirm = tk.Entry(
+            body,
+            font=("Consolas", 10, "bold"),
+            bg=BG_SURFACE,
+            fg=TEXT_PRIMARY,
+            insertbackground=TEXT_PRIMARY,
+            relief="flat",
+            highlightthickness=1,
+            highlightbackground=BORDER_COLOR
+        )
+        self.entry_confirm.pack(fill="x", ipady=5, pady=(2, 8))
+        self.entry_confirm.focus_set()
+
+        # Listen for keystrokes to dynamically enable/disable the button
+        self.entry_confirm.bind("<KeyRelease>", self.check_input)
+
+        # Button Bar
+        btn_bar = tk.Frame(self, bg=BG_PANEL, height=52, highlightthickness=1, highlightbackground=BORDER_COLOR)
+        btn_bar.pack(side="bottom", fill="x", padx=12, pady=(4, 12))
+        btn_bar.pack_propagate(False)
+
+        btn_cancel = tk.Button(
+            btn_bar,
+            text="Cancel",
+            font=FONT_UI,
+            fg=TEXT_MUTED,
+            bg=BG_SURFACE,
+            activebackground=BG_ACTIVE,
+            activeforeground=TEXT_PRIMARY,
+            relief="flat",
+            padx=16,
+            pady=4,
+            cursor="hand2",
+            command=self.destroy
+        )
+        btn_cancel.pack(side="right", padx=(6, 12), pady=10)
+
+        self.btn_delete = tk.Button(
+            btn_bar,
+            text="🗑️ Permanently Delete Database",
+            font=("Segoe UI", 9, "bold"),
+            fg=TEXT_DIM,
+            bg=BG_SURFACE,
+            activebackground=ACCENT_CORAL,
+            activeforeground=BG_MAIN,
+            relief="flat",
+            padx=16,
+            pady=4,
+            state="disabled",
+            command=self.on_confirm_delete
+        )
+        self.btn_delete.pack(side="right", padx=6, pady=10)
+
+    def check_input(self, event=None):
+        val = self.entry_confirm.get().strip()
+        if val == "DELETE DATABASE":
+            self.btn_delete.configure(
+                state="normal",
+                fg=BG_MAIN,
+                bg=ACCENT_CORAL,
+                cursor="hand2"
+            )
+            if event and event.keysym in ("Return", "KP_Enter"):
+                self.on_confirm_delete()
+        else:
+            self.btn_delete.configure(
+                state="disabled",
+                fg=TEXT_DIM,
+                bg=BG_SURFACE,
+                cursor="arrow"
+            )
+
+    def on_confirm_delete(self):
+        if self.entry_confirm.get().strip() == "DELETE DATABASE":
+            self.result = True
+            self.destroy()
+
+

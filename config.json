@@ -1,6 +1,6 @@
 {
   "app_name": "OrbitTracker",
-  "version": "1.0.0",
+  "version": "1.0.1-dev",
   "database_path": "orbit_database.json",
   "theme": {
     "palette": "dark_cosmic",

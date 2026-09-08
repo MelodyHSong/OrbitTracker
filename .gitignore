@@ -33,4 +33,5 @@ ehthumbs.db
 
 # User Runtime Data & Autosaves (optional custom state)
 *.tmp
-user_data/
+user_data/
+misc/

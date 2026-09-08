@@ -126,7 +126,7 @@ class DatabaseManager:
     def __init__(self, db_path: str = None):
         self.db_path = os.path.abspath(db_path or self.DEFAULT_DB_NAME)
         self.app_name = "OrbitTracker"
-        self.version = "1.0.0"
+        self.version = "1.0.1-dev"
         self.queue_prefix = "Q-"
         self.next_queue_id = 1
         self.custom_columns = []  # List of {"id": str, "name": str, "default_val": str}
@@ -160,7 +160,7 @@ class DatabaseManager:
                 data = json.load(f)
 
             self.app_name = data.get("app_name", "OrbitTracker")
-            self.version = data.get("version", "1.0.0")
+            self.version = data.get("version", "1.0.1-dev")
             self.queue_prefix = data.get("queue_prefix", "Q-")
             self.next_queue_id = int(data.get("next_queue_id", 1))
             self.custom_columns = data.get("custom_columns", [])

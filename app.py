@@ -35,7 +35,7 @@ if sys.platform == "win32":
 
 # Import OrbitTracker Model & Dialogs
 from database import DatabaseManager, WorkItem, ServiceNote
-from dialogs import ItemDialog, ServiceNoteDialog, ColumnManagerDialog
+from dialogs import ItemDialog, ServiceNoteDialog, ColumnManagerDialog, DatabaseInitDialog, DeleteDatabaseDialog
 
 # ==============================================================================
 # 🪐 COSMIC COLOR PALETTE & THEME CONSTANTS
@@ -87,13 +87,19 @@ class OrbitTrackerApp:
         self.sort_column = "queue_number"
         self.sort_desc = False
 
-        # Determine Database File Path
-        db_path = initial_file or self.config.get("database_path") or os.path.join(self.base_dir, "orbit_database.json")
-        self.db = DatabaseManager(db_path)
+        # Determine Database File Path (Opening last opened database from config)
+        cfg_db_path = self.config.get("database_path")
+        if initial_file:
+            db_path = os.path.abspath(initial_file)
+        elif cfg_db_path:
+            db_path = cfg_db_path if os.path.isabs(cfg_db_path) else os.path.join(self.base_dir, cfg_db_path)
+        else:
+            db_path = os.path.join(self.base_dir, "orbit_database.json")
 
-        # Populate sample items if brand new empty database
-        if len(self.db.items) == 0:
-            self.seed_starter_data()
+        self.db_is_new = not os.path.exists(db_path)
+        self.db = DatabaseManager(db_path)
+        if initial_file:
+            self.save_config()
 
         # Set Window Icon
         self.set_app_icon()
@@ -113,7 +119,12 @@ class OrbitTrackerApp:
         # Initial Refresh
         self.refresh_table()
         self.update_metrics_cards()
-        self.log_message(f"OrbitTracker initialized. Database loaded: {os.path.basename(self.db.db_path)} ({len(self.db.items)} records)", level="SUCCESS")
+
+        # If default database was not present, prompt user to create empty or load demo
+        if self.db_is_new:
+            self.root.after(100, self.prompt_database_init)
+        else:
+            self.log_message(f"OrbitTracker initialized. Database loaded: {os.path.basename(self.db.db_path)} ({len(self.db.items)} records)", level="SUCCESS")
 
     # ==========================================================================
     # CONFIGURATION & ASSETS
@@ -121,7 +132,7 @@ class OrbitTrackerApp:
     def load_config(self):
         default_config = {
             "app_name": "OrbitTracker",
-            "version": "1.0.0",
+            "version": "1.0.1-dev",
             "database_path": "orbit_database.json",
             "preferences": {
                 "autosave_enabled": True,
@@ -139,7 +150,15 @@ class OrbitTrackerApp:
 
     def save_config(self):
         try:
-            self.config["database_path"] = os.path.relpath(self.db.db_path, self.base_dir)
+            try:
+                rel = os.path.relpath(self.db.db_path, self.base_dir)
+                if not rel.startswith(".."):
+                    self.config["database_path"] = rel
+                else:
+                    self.config["database_path"] = self.db.db_path
+            except ValueError:
+                self.config["database_path"] = self.db.db_path
+
             with open(self.config_path, "w", encoding="utf-8") as f:
                 json.dump(self.config, f, indent=2)
         except Exception as e:
@@ -158,8 +177,30 @@ class OrbitTrackerApp:
                 except Exception:
                     pass
 
+    def prompt_database_init(self):
+        """Asks user whether to create an empty database or load the demo when default DB is missing."""
+        dlg = DatabaseInitDialog(self.root, db_path=self.db.db_path)
+        self.root.wait_window(dlg)
+
+        if dlg.result == "demo":
+            self.seed_starter_data()
+            self.db.save()
+            self.save_config()
+            self.refresh_table()
+            self.update_metrics_cards()
+            self.log_message(f"Demo database loaded: {os.path.basename(self.db.db_path)} ({len(self.db.items)} sample records)", level="SUCCESS")
+        else:
+            self.db.create_default_schema()
+            self.db.save()
+            self.save_config()
+            self.refresh_table()
+            self.update_metrics_cards()
+            self.log_message(f"Created fresh empty database: {os.path.basename(self.db.db_path)}", level="SUCCESS")
+
     def seed_starter_data(self):
-        """Creates sample items when initializing OrbitTracker for the first time."""
+        """Creates sample items when initializing OrbitTracker demo data."""
+        if len(self.db.items) > 0:
+            return
         item1 = self.db.add_item(
             moc_number="MOC-3041",
             st_number="ST-94812",
@@ -426,6 +467,7 @@ class OrbitTrackerApp:
         self.create_sidebar_btn(sidebar, "💾 Save Database (Ctrl+S)", self.on_save_db)
         self.create_sidebar_btn(sidebar, "📂 Open Database... (Ctrl+O)", self.on_open_db)
         self.create_sidebar_btn(sidebar, "📄 New Database", self.on_new_db)
+        self.create_sidebar_btn(sidebar, "🗑️ Delete Database...", self.on_delete_db, accent=ACCENT_CORAL)
         self.create_sidebar_btn(sidebar, "📤 Export CSV (Ctrl+E)", self.on_export_csv)
 
         # Filters & Search Card
@@ -1272,6 +1314,42 @@ class OrbitTrackerApp:
             self.update_metrics_cards()
             self.log_message(f"Initialized new database at: {file_path}", level="SUCCESS")
 
+    def on_delete_db(self):
+        """Allows user to permanently delete the current database file after typing confirmation."""
+        dlg = DeleteDatabaseDialog(self.root, db_path=self.db.db_path)
+        self.root.wait_window(dlg)
+
+        if not dlg.result:
+            return
+
+        target_file = self.db.db_path
+        try:
+            if os.path.exists(target_file):
+                os.remove(target_file)
+            tmp_file = target_file + ".tmp"
+            if os.path.exists(tmp_file):
+                os.remove(tmp_file)
+
+            self.log_message(f"Permanently deleted database: {os.path.basename(target_file)}", level="WARNING")
+            messagebox.showinfo("Database Deleted", f"The database file has been permanently deleted:\n{target_file}", parent=self.root)
+        except Exception as e:
+            messagebox.showerror("Delete Error", f"Failed to delete database file:\n{e}", parent=self.root)
+            self.log_message(f"Failed to delete database: {e}", level="ERROR")
+            return
+
+        # Reset to default database path
+        default_db_path = os.path.join(self.base_dir, "orbit_database.json")
+        self.config["database_path"] = "orbit_database.json"
+        self.save_config()
+
+        self.db = DatabaseManager(default_db_path)
+        self.selected_item_id = None
+        self.refresh_table()
+        self.update_metrics_cards()
+
+        # Prompt user to create a new database or load demo
+        self.prompt_database_init()
+
     def on_export_csv(self):
         file_path = filedialog.asksaveasfilename(
             title="Export Work Items to CSV",
@@ -1346,6 +1424,11 @@ class OrbitTrackerApp:
         self.root.bind("<Delete>", lambda e: self.on_delete_item())
 
     def on_window_close(self):
+        try:
+            self.save_config()
+        except Exception:
+            pass
+
         if self.db.is_dirty and self.config.get("preferences", {}).get("confirm_exit_on_unsaved", True):
             resp = messagebox.askyesnocancel("Unsaved Changes", "Database has unsaved changes. Save before exiting?", parent=self.root)
             if resp is True:

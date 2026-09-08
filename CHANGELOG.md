@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## ⭐ [1.0.1-dev] - 2026-09-07
+
+### Added
+- **Database Initialization Prompt**: Modal startup dialog (`DatabaseInitDialog`) when the database file is not present, offering a direct choice to load sample demo records or initialize a clean, blank database.
+- **Protected Database Deletion**: Dedicated `🗑️ Delete Database...` button with a secure confirmation dialog (`DeleteDatabaseDialog`) requiring the exact phrase `"DELETE DATABASE"` before deleting the file from disk.
+- **Last Opened Database Memory**: Automatically tracks, stores, and opens the last active database across workstation sessions.
+
+### Changed
+- **Non-Intrusive Database Seeding**: Removed silent automatic sample item injection so empty databases remain clean unless the user explicitly chooses to load demo data.
+
+---
+
 ## ⭐ [1.0.0] - 2026-09-06
 
 ### Added

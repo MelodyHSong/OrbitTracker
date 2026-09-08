@@ -32,6 +32,9 @@
   - Total Work Items count.
   - Active vs. Inactive status counters.
   - Total service maintenance notes logged.
+- **🌱 Smart Database Initialization**: Missing or fresh database paths prompt users with a choice to load demo equipment data or start with a clean empty database.
+- **🛡️ Protected Database Deletion**: Permanent file deletion requires typing `"DELETE DATABASE"` in a confirmation modal to safeguard against accidental data loss.
+- **🔄 Workspace State Persistence**: Automatically remembers and reopens the last opened database on launch.
 - **📤 Export Capabilities**: 1-click export to standard CSV format including custom columns and formatted service history summaries.
 - **🎨 Cosmic Dark Workstation Aesthetic**: High-DPI scaling, custom Tkinter and TTK clam theme, custom multi-resolution icon (`.ico`), and activity console.
 
@@ -63,7 +66,7 @@ Databases are saved by default to `orbit_database.json` in the application direc
 ```json
 {
   "app_name": "OrbitTracker",
-  "version": "1.0.0",
+  "version": "1.0.1-dev",
   "last_modified": "2026-09-07 20:30:00",
   "queue_prefix": "Q-",
   "next_queue_id": 4,

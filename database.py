@@ -1,0 +1,565 @@
+# 🪐 OrbitTracker — Database & Persistence Layer
+# Author: MelodyHSong
+# File Name: database.py
+# Description: JSON-backed database manager with auto-generated Queue Numbers,
+#              dynamic custom columns, service log tracking, and search/filtering.
+
+import os
+import json
+import uuid
+from datetime import datetime
+
+
+class ServiceNote:
+    """Represents a single maintenance or work note for a tracked item."""
+    def __init__(self, note: str, timestamp: str = None, note_id: str = None):
+        self.id = note_id or str(uuid.uuid4())[:8]
+        self.timestamp = timestamp or datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        self.note = str(note).strip()
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "timestamp": self.timestamp,
+            "note": self.note
+        }
+
+    @classmethod
+    def from_dict(cls, data):
+        return cls(
+            note=data.get("note", ""),
+            timestamp=data.get("timestamp"),
+            note_id=data.get("id")
+        )
+
+
+class WorkItem:
+    """Represents an equipment, tool, or work activity item tracked in OrbitTracker."""
+    def __init__(
+        self,
+        queue_number: str = "",
+        moc_number: str = "",
+        st_number: str = "",
+        item_name: str = "",
+        make_and_model: str = "",
+        status: str = "Active",
+        department: str = "",
+        custom_fields: dict = None,
+        service_log: list = None,
+        item_id: str = None,
+        created_at: str = None,
+        updated_at: str = None
+    ):
+        self.id = item_id or str(uuid.uuid4())
+        self.queue_number = queue_number
+        self.moc_number = str(moc_number).strip()
+        self.st_number = str(st_number).strip()
+        self.item_name = str(item_name).strip()
+        self.make_and_model = str(make_and_model).strip()
+        self.status = "Active" if str(status).strip().lower() in ("active", "true", "1") else "Inactive"
+        self.department = str(department).strip()
+        self.custom_fields = dict(custom_fields) if custom_fields else {}
+        self.service_log = [
+            note if isinstance(note, ServiceNote) else ServiceNote.from_dict(note)
+            for note in (service_log or [])
+        ]
+        now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        self.created_at = created_at or now_str
+        self.updated_at = updated_at or now_str
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "queue_number": self.queue_number,
+            "moc_number": self.moc_number,
+            "st_number": self.st_number,
+            "item_name": self.item_name,
+            "make_and_model": self.make_and_model,
+            "status": self.status,
+            "department": self.department,
+            "custom_fields": self.custom_fields,
+            "service_log": [n.to_dict() for n in self.service_log],
+            "created_at": self.created_at,
+            "updated_at": self.updated_at
+        }
+
+    @classmethod
+    def from_dict(cls, data):
+        return cls(
+            queue_number=data.get("queue_number", ""),
+            moc_number=data.get("moc_number", ""),
+            st_number=data.get("st_number", ""),
+            item_name=data.get("item_name", ""),
+            make_and_model=data.get("make_and_model", ""),
+            status=data.get("status", "Active"),
+            department=data.get("department", ""),
+            custom_fields=data.get("custom_fields", {}),
+            service_log=data.get("service_log", []),
+            item_id=data.get("id"),
+            created_at=data.get("created_at"),
+            updated_at=data.get("updated_at")
+        )
+
+    def add_note(self, note_text: str, timestamp: str = None) -> ServiceNote:
+        note = ServiceNote(note=note_text, timestamp=timestamp)
+        self.service_log.append(note)
+        self.touch()
+        return note
+
+    def delete_note(self, note_id: str) -> bool:
+        before_len = len(self.service_log)
+        self.service_log = [n for n in self.service_log if n.id != note_id]
+        if len(self.service_log) < before_len:
+            self.touch()
+            return True
+        return False
+
+    def touch(self):
+        self.updated_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+
+class DatabaseManager:
+    """Manages reading, writing, querying, and updating the OrbitTracker JSON database."""
+
+    DEFAULT_DB_NAME = "orbit_database.json"
+
+    def __init__(self, db_path: str = None):
+        self.db_path = os.path.abspath(db_path or self.DEFAULT_DB_NAME)
+        self.app_name = "OrbitTracker"
+        self.version = "1.0.0"
+        self.queue_prefix = "Q-"
+        self.next_queue_id = 1
+        self.custom_columns = []  # List of {"id": str, "name": str, "default_val": str}
+        self.items = []           # List of WorkItem instances
+        self.is_dirty = False
+        self.last_saved = None
+
+        self.load()
+
+    def create_default_schema(self):
+        """Initializes empty database schema."""
+        self.queue_prefix = "Q-"
+        self.next_queue_id = 1
+        self.custom_columns = []
+        self.items = []
+        self.is_dirty = False
+
+    def load(self, path: str = None):
+        """Loads database from JSON file. If not found, initializes a fresh database."""
+        if path:
+            self.db_path = os.path.abspath(path)
+
+        if not os.path.exists(self.db_path):
+            self.create_default_schema()
+            # Save default starter database
+            self.save()
+            return
+
+        try:
+            with open(self.db_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+
+            self.app_name = data.get("app_name", "OrbitTracker")
+            self.version = data.get("version", "1.0.0")
+            self.queue_prefix = data.get("queue_prefix", "Q-")
+            self.next_queue_id = int(data.get("next_queue_id", 1))
+            self.custom_columns = data.get("custom_columns", [])
+
+            items_raw = data.get("items", [])
+            self.items = [WorkItem.from_dict(it) for it in items_raw]
+            self.is_dirty = False
+            self.last_saved = datetime.now()
+        except Exception as e:
+            raise RuntimeError(f"Failed to load database from {self.db_path}: {e}")
+
+    def save(self, path: str = None):
+        """Saves current database to JSON file atomically."""
+        target_path = os.path.abspath(path or self.db_path)
+        dir_name = os.path.dirname(target_path)
+        if dir_name:
+            os.makedirs(dir_name, exist_ok=True)
+
+        data = {
+            "app_name": self.app_name,
+            "version": self.version,
+            "last_modified": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "queue_prefix": self.queue_prefix,
+            "next_queue_id": self.next_queue_id,
+            "custom_columns": self.custom_columns,
+            "items": [it.to_dict() for it in self.items]
+        }
+
+        # Write to temporary file first, then atomically replace
+        temp_path = target_path + ".tmp"
+        with open(temp_path, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2, ensure_ascii=False)
+
+        os.replace(temp_path, target_path)
+
+        self.db_path = target_path
+        self.is_dirty = False
+        self.last_saved = datetime.now()
+
+    # ==========================================================================
+    # QUEUE NUMBER GENERATION
+    # ==========================================================================
+    def generate_next_queue_number(self) -> str:
+        """Returns the next sequential queue number and auto-increments the counter."""
+        num = self.next_queue_id
+        # Format as Q-001, Q-002, etc.
+        q_str = f"{self.queue_prefix}{num:03d}"
+        return q_str
+
+    def peek_next_queue_number(self) -> str:
+        """Previews the next queue number without incrementing."""
+        return f"{self.queue_prefix}{self.next_queue_id:03d}"
+
+    def update_next_queue_id_from_items(self):
+        """Ensures next_queue_id is always greater than any existing Q-xxx numbers."""
+        max_id = self.next_queue_id
+        for it in self.items:
+            q = it.queue_number
+            if q.startswith(self.queue_prefix):
+                suffix = q[len(self.queue_prefix):]
+                if suffix.isdigit():
+                    val = int(suffix)
+                    if val >= max_id:
+                        max_id = val + 1
+        self.next_queue_id = max_id
+
+    # ==========================================================================
+    # ITEM CRUD
+    # ==========================================================================
+    def add_item(
+        self,
+        moc_number: str,
+        st_number: str,
+        item_name: str,
+        make_and_model: str,
+        status: str = "Active",
+        department: str = "",
+        custom_fields: dict = None,
+        initial_note: str = None,
+        queue_number: str = None
+    ) -> WorkItem:
+        """Adds a new work item with auto-generated queue number and optional initial service note."""
+        if not queue_number:
+            queue_number = self.generate_next_queue_number()
+            self.next_queue_id += 1
+        else:
+            self.update_next_queue_id_from_items()
+
+        # Initialize any custom fields with default values
+        fields = {}
+        for col in self.custom_columns:
+            col_id = col["id"]
+            fields[col_id] = col.get("default_val", "")
+        if custom_fields:
+            fields.update(custom_fields)
+
+        item = WorkItem(
+            queue_number=queue_number,
+            moc_number=moc_number,
+            st_number=st_number,
+            item_name=item_name,
+            make_and_model=make_and_model,
+            status=status,
+            department=department,
+            custom_fields=fields
+        )
+
+        if initial_note and str(initial_note).strip():
+            item.add_note(initial_note)
+
+        self.items.append(item)
+        self.is_dirty = True
+        return item
+
+    def update_item(
+        self,
+        item_id: str,
+        moc_number: str = None,
+        st_number: str = None,
+        item_name: str = None,
+        make_and_model: str = None,
+        status: str = None,
+        department: str = None,
+        custom_fields: dict = None,
+        queue_number: str = None
+    ) -> WorkItem:
+        """Updates attributes of an existing item."""
+        item = self.get_item_by_id(item_id)
+        if not item:
+            raise KeyError(f"Item not found: {item_id}")
+
+        if queue_number is not None:
+            item.queue_number = queue_number.strip()
+        if moc_number is not None:
+            item.moc_number = moc_number.strip()
+        if st_number is not None:
+            item.st_number = st_number.strip()
+        if item_name is not None:
+            item.item_name = item_name.strip()
+        if make_and_model is not None:
+            item.make_and_model = make_and_model.strip()
+        if status is not None:
+            item.status = "Active" if str(status).strip().lower() in ("active", "true", "1") else "Inactive"
+        if department is not None:
+            item.department = department.strip()
+        if custom_fields is not None:
+            item.custom_fields.update(custom_fields)
+
+        item.touch()
+        self.is_dirty = True
+        return item
+
+    def delete_item(self, item_id: str) -> bool:
+        """Removes an item from the database."""
+        before = len(self.items)
+        self.items = [it for it in self.items if it.id != item_id]
+        if len(self.items) < before:
+            self.is_dirty = True
+            return True
+        return False
+
+    def get_item_by_id(self, item_id: str) -> WorkItem:
+        """Finds item by unique ID."""
+        for it in self.items:
+            if it.id == item_id:
+                return it
+        return None
+
+    def toggle_status(self, item_id: str) -> str:
+        """Toggles status between Active and Inactive."""
+        item = self.get_item_by_id(item_id)
+        if item:
+            item.status = "Inactive" if item.status == "Active" else "Active"
+            item.touch()
+            self.is_dirty = True
+            return item.status
+        return None
+
+    # ==========================================================================
+    # SERVICE LOG OPERATIONS
+    # ==========================================================================
+    def add_service_note(self, item_id: str, note_text: str, timestamp: str = None) -> ServiceNote:
+        """Adds a maintenance note to an item's service log."""
+        item = self.get_item_by_id(item_id)
+        if not item:
+            raise KeyError(f"Item not found: {item_id}")
+        note = item.add_note(note_text, timestamp)
+        self.is_dirty = True
+        return note
+
+    def delete_service_note(self, item_id: str, note_id: str) -> bool:
+        """Deletes a maintenance note from an item's service log."""
+        item = self.get_item_by_id(item_id)
+        if not item:
+            return False
+        res = item.delete_note(note_id)
+        if res:
+            self.is_dirty = True
+        return res
+
+    # ==========================================================================
+    # DYNAMIC CUSTOM COLUMNS
+    # ==========================================================================
+    def add_custom_column(self, name: str, default_val: str = "") -> dict:
+        """Adds a new user-defined column. Automatically populates all existing items."""
+        name = name.strip()
+        if not name:
+            raise ValueError("Column name cannot be empty")
+
+        # Check for duplicate names
+        for col in self.custom_columns:
+            if col["name"].lower() == name.lower():
+                raise ValueError(f"Column '{name}' already exists.")
+
+        col_id = "col_" + str(uuid.uuid4())[:8]
+        col_def = {
+            "id": col_id,
+            "name": name,
+            "default_val": default_val
+        }
+        self.custom_columns.append(col_def)
+
+        # Propagate default to all existing items
+        for it in self.items:
+            if col_id not in it.custom_fields:
+                it.custom_fields[col_id] = default_val
+
+        self.is_dirty = True
+        return col_def
+
+    def remove_custom_column(self, col_id: str) -> bool:
+        """Removes a custom column definition and deletes its field from all items."""
+        before = len(self.custom_columns)
+        self.custom_columns = [c for c in self.custom_columns if c["id"] != col_id]
+        if len(self.custom_columns) < before:
+            for it in self.items:
+                it.custom_fields.pop(col_id, None)
+            self.is_dirty = True
+            return True
+        return False
+
+    def rename_custom_column(self, col_id: str, new_name: str) -> bool:
+        """Renames a custom column display label."""
+        new_name = new_name.strip()
+        if not new_name:
+            raise ValueError("Column name cannot be empty")
+        for col in self.custom_columns:
+            if col["id"] == col_id:
+                col["name"] = new_name
+                self.is_dirty = True
+                return True
+        return False
+
+    # ==========================================================================
+    # QUERYING, SEARCHING & FILTERING
+    # ==========================================================================
+    def get_departments(self) -> list:
+        """Returns sorted list of unique department names currently in use."""
+        depts = {it.department for it in self.items if it.department}
+        return sorted(list(depts))
+
+    def filter_items(
+        self,
+        query: str = "",
+        status_filter: str = "All",
+        department_filter: str = "All",
+        sort_by: str = "queue_number",
+        sort_desc: bool = False
+    ) -> list:
+        """Filters and sorts items based on search query, status, and department."""
+        results = []
+        q_clean = query.strip().lower()
+
+        for it in self.items:
+            # 1. Status Filter
+            if status_filter != "All" and it.status != status_filter:
+                continue
+
+            # 2. Department Filter
+            if department_filter != "All" and it.department != department_filter:
+                continue
+
+            # 3. Query Text Search
+            if q_clean:
+                # Check standard fields
+                fields_to_check = [
+                    it.queue_number,
+                    it.moc_number,
+                    it.st_number,
+                    it.item_name,
+                    it.make_and_model,
+                    it.status,
+                    it.department
+                ]
+                # Check custom fields
+                for val in it.custom_fields.values():
+                    fields_to_check.append(str(val))
+                # Check notes
+                for n in it.service_log:
+                    fields_to_check.append(n.note)
+
+                matched = any(q_clean in str(val).lower() for val in fields_to_check)
+                if not matched:
+                    continue
+
+            results.append(it)
+
+        # 4. Sorting
+        def sort_key(item: WorkItem):
+            if sort_by == "queue_number":
+                # Try natural sorting for Q-xxx
+                q = item.queue_number
+                if q.startswith(self.queue_prefix):
+                    s = q[len(self.queue_prefix):]
+                    if s.isdigit():
+                        return (0, int(s))
+                return (1, q.lower())
+            elif sort_by == "moc_number":
+                return item.moc_number.lower()
+            elif sort_by == "st_number":
+                return item.st_number.lower()
+            elif sort_by == "item_name":
+                return item.item_name.lower()
+            elif sort_by == "make_and_model":
+                return item.make_and_model.lower()
+            elif sort_by == "status":
+                return item.status.lower()
+            elif sort_by == "department":
+                return item.department.lower()
+            elif sort_by == "service_log":
+                return len(item.service_log)
+            elif sort_by.startswith("col_"):
+                return str(item.custom_fields.get(sort_by, "")).lower()
+            elif sort_by == "created_at":
+                return item.created_at
+            elif sort_by == "updated_at":
+                return item.updated_at
+            return item.queue_number.lower()
+
+        results.sort(key=sort_key, reverse=sort_desc)
+        return results
+
+    def get_metrics(self) -> dict:
+        """Returns database KPI statistics."""
+        total = len(self.items)
+        active = sum(1 for it in self.items if it.status == "Active")
+        inactive = total - active
+        total_notes = sum(len(it.service_log) for it in self.items)
+        return {
+            "total_items": total,
+            "active_items": active,
+            "inactive_items": inactive,
+            "total_notes": total_notes
+        }
+
+    # ==========================================================================
+    # CSV EXPORT
+    # ==========================================================================
+    def export_csv(self, file_path: str):
+        """Exports the entire database or items to a CSV file."""
+        import csv
+
+        headers = [
+            "Queue Number",
+            "MOC Number",
+            "ST Number",
+            "Item Name",
+            "Make and Model",
+            "Status",
+            "Department",
+            "Notes Count",
+            "Latest Note"
+        ]
+        custom_cols = self.custom_columns
+        for c in custom_cols:
+            headers.append(c["name"])
+        headers.extend(["Created At", "Updated At", "All Service Notes"])
+
+        with open(file_path, "w", newline="", encoding="utf-8") as f:
+            writer = csv.writer(f)
+            writer.writerow(headers)
+
+            for it in self.items:
+                latest_note = it.service_log[-1].note if it.service_log else ""
+                all_notes_str = " | ".join(
+                    f"[{n.timestamp}] {n.note}" for n in it.service_log
+                )
+                row = [
+                    it.queue_number,
+                    it.moc_number,
+                    it.st_number,
+                    it.item_name,
+                    it.make_and_model,
+                    it.status,
+                    it.department,
+                    len(it.service_log),
+                    latest_note
+                ]
+                for c in custom_cols:
+                    row.append(it.custom_fields.get(c["id"], ""))
+                row.extend([it.created_at, it.updated_at, all_notes_str])
+                writer.writerow(row)

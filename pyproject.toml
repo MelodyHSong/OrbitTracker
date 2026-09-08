@@ -1,0 +1,53 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "orbittracker"
+version = "1.0.0"
+description = "Work Activity & Maintenance Tracking Workstation with JSON Database Persistence."
+readme = "README.md"
+license = { text = "MIT" }
+authors = [
+    { name = "Melody H. Song", email = "contact@cassiopeiastudios.com" }
+]
+maintainers = [
+    { name = "Cassiopeia Studios" }
+]
+requires-python = ">=3.8"
+keywords = [
+    "desktop-app",
+    "work-tracker",
+    "maintenance-log",
+    "tkinter",
+    "cosmic-ui"
+]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Environment :: Win32 (MS Windows)",
+    "Intended Audience :: Developers",
+    "Intended Audience :: End Users/Desktop",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: Microsoft :: Windows",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: User Interfaces",
+]
+dependencies = [
+    "pillow>=10.0.0",
+]
+
+[project.optional-dependencies]
+build = [
+    "pyinstaller>=6.0.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/MelodyHSong/OrbitTracker"
+Repository = "https://github.com/MelodyHSong/OrbitTracker"
+Issues = "https://github.com/MelodyHSong/OrbitTracker/issues"
+

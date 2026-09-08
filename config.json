@@ -1,0 +1,20 @@
+{
+  "app_name": "OrbitTracker",
+  "version": "1.0.0",
+  "database_path": "orbit_database.json",
+  "theme": {
+    "palette": "dark_cosmic",
+    "high_dpi": true
+  },
+  "window": {
+    "width": 1240,
+    "height": 760,
+    "min_width": 960,
+    "min_height": 600
+  },
+  "preferences": {
+    "autosave_enabled": true,
+    "autosave_interval_ms": 3000,
+    "confirm_exit_on_unsaved": true
+  }
+}

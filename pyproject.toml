@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "orbittracker"
-version = "1.0.1-dev"
+version = "1.0.2-dev"
 description = "Work Activity & Maintenance Tracking Workstation with JSON Database Persistence."
 readme = "README.md"
 license = { text = "MIT" }

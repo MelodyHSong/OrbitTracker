@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## ⭐ [1.0.2-dev] - 2026-09-08
+
+### Added
+- **Dynamic Highest Queue Numbering**: The auto-generated Queue number now dynamically and strictly follows the highest existing record in the database. Adding, editing, or deleting items recalculates the sequence automatically (`highest + 1`) to eliminate drift and stale counters.
+- **Native Service Note Editing**: Direct in-place editing for maintenance log entries via new timeline edit buttons (`✏`) and double-click actions without needing to open the JSON file directly.
+- **Database Note Update API**: Added `edit_note()` to `WorkItem` and `update_service_note()` to `DatabaseManager`.
+- **Keyboard Shortcut**: Added <kbd>Ctrl</kbd>+<kbd>Enter</kbd> to quickly save or update service notes in `ServiceNoteDialog`.
+
+### Fixed
+- **Service Note Dialog Save Button Visibility**: Resolved an issue where Tkinter's packing order and default multi-line text widget height caused the bottom action bar (`Save Note` / `Cancel`) in `ServiceNoteDialog` to be unmapped and hidden off-screen.
+- **Dialog Viewport Hardening**: Refactored `ItemDialog` and `ServiceNoteDialog` to guarantee bottom action bars remain firmly anchored and visible across all display resolutions.
+
+---
+
 ## ⭐ [1.0.1-dev] - 2026-09-07
 
 ### Added

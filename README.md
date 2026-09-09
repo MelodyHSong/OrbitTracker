@@ -9,9 +9,9 @@
 ## ✨ Features
 
 - **📂 JSON-Backed Database**: Human-readable, portable, atomic writes that protect against data corruption.
-- **🔢 Auto-Generated Queue Numbers**: Sequential tracking (`Q-001`, `Q-002`, ...) created automatically when adding items, with custom override support.
+- **🔢 Auto-Generated Queue Numbers**: Dynamic sequential tracking (`Q-001`, `Q-002`, ...) that always follows the highest existing queue number in the database, automatically recalculating when items are added, modified, or deleted.
 - **📋 Pre-Defined Core Columns**:
-  - **Queue Number**: Automatic sequence identifier.
+  - **Queue Number**: Automatic sequence identifier following the highest record.
   - **MOC Number**: Management of Change / Work Order tracking identifier.
   - **ST Number**: Service Tag identifier.
   - **Item Name**: Name and description of the equipment or workpiece.
@@ -22,8 +22,9 @@
 - **⚙️ Dynamic Custom Columns**: Add new user-defined fields (e.g. *Facility Bay*, *Serial Number*, *Assigned Technician*, *Priority*) at runtime. All items instantly inherit the schema.
 - **🛠️ Service Log Timeline**:
   - View full maintenance histories in reverse chronological order.
+  - **Native In-App Note Editing**: Edit existing maintenance notes directly via timeline edit buttons (`✏`) or double-clicking any note card without needing to open the JSON file.
   - Quick inline logging directly from the inspector panel without modal dialogs.
-  - Timestamped notes with edit and delete capabilities.
+  - Timestamped notes with full edit and delete capabilities.
 - **🔍 Instant Multi-Field Search & Filter**:
   - Live search across all core attributes, custom fields, and maintenance note content.
   - Segmented status filtering (`All`, `Active`, `Inactive`).
@@ -66,8 +67,8 @@ Databases are saved by default to `orbit_database.json` in the application direc
 ```json
 {
   "app_name": "OrbitTracker",
-  "version": "1.0.1-dev",
-  "last_modified": "2026-09-07 20:30:00",
+  "version": "1.0.2-dev",
+  "last_modified": "2026-09-08 20:30:00",
   "queue_prefix": "Q-",
   "next_queue_id": 4,
   "custom_columns": [
@@ -115,6 +116,7 @@ Databases are saved by default to `orbit_database.json` in the application direc
 | `Ctrl + O` | Open Existing Database File |
 | `Ctrl + E` | Export Records to CSV |
 | `Ctrl + F` | Focus Live Search Box |
+| `Ctrl + Enter` | Save or Update Note in Service Note Dialog |
 | `F5` | Refresh Workstation Grid & Statistics |
 | `Delete` | Delete Currently Selected Item |
 

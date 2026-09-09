@@ -93,9 +93,50 @@ class ItemDialog(BaseDialog):
         lbl_badge = tk.Label(header, text=badge_txt, font=FONT_CODE, fg=ACCENT_GOLD, bg=BG_SURFACE, padx=8, pady=3)
         lbl_badge.pack(side="right", padx=14, pady=10)
 
+        # Bottom Button Bar (Packed at bottom before scrollable container)
+        btn_bar = tk.Frame(self, bg=BG_PANEL, height=52, highlightthickness=1, highlightbackground=BORDER_COLOR)
+        btn_bar.pack(side="bottom", fill="x", padx=12, pady=(4, 12))
+        btn_bar.pack_propagate(False)
+
+        btn_cancel = tk.Button(
+            btn_bar,
+            text="Cancel",
+            font=FONT_UI,
+            fg=TEXT_PRIMARY,
+            bg=BG_SURFACE,
+            activebackground=BG_ACTIVE,
+            activeforeground=TEXT_PRIMARY,
+            relief="flat",
+            padx=14,
+            pady=4,
+            cursor="hand2",
+            command=self.destroy
+        )
+        btn_cancel.pack(side="right", padx=10, pady=10)
+
+        save_txt = "Save Changes" if self.item else "+ Add Work Item"
+        btn_save = tk.Button(
+            btn_bar,
+            text=save_txt,
+            font=("Segoe UI", 9, "bold"),
+            fg=BG_MAIN,
+            bg=ACCENT_CYAN,
+            activebackground="#79c0ff",
+            activeforeground=BG_MAIN,
+            relief="flat",
+            padx=16,
+            pady=4,
+            cursor="hand2",
+            command=self.on_save
+        )
+        btn_save.pack(side="right", padx=4, pady=10)
+
         # Scrollable form container for small displays / many custom columns
-        canvas = tk.Canvas(self, bg=BG_MAIN, highlightthickness=0)
-        v_scroll = ttk.Scrollbar(self, orient="vertical", command=canvas.yview)
+        scroll_container = tk.Frame(self, bg=BG_MAIN)
+        scroll_container.pack(side="top", fill="both", expand=True, padx=14, pady=4)
+
+        canvas = tk.Canvas(scroll_container, bg=BG_MAIN, highlightthickness=0)
+        v_scroll = ttk.Scrollbar(scroll_container, orient="vertical", command=canvas.yview)
         form_frame = tk.Frame(canvas, bg=BG_MAIN)
 
         form_frame.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
@@ -103,7 +144,7 @@ class ItemDialog(BaseDialog):
         canvas.bind("<Configure>", lambda e: canvas.itemconfig(canvas_window, width=e.width))
 
         canvas.configure(yscrollcommand=v_scroll.set)
-        canvas.pack(side="top", fill="both", expand=True, padx=14, pady=4)
+        canvas.pack(side="left", fill="both", expand=True)
         v_scroll.pack(side="right", fill="y")
 
         # Row 1: Queue Number & Status
@@ -213,43 +254,6 @@ class ItemDialog(BaseDialog):
                                             height=3, relief="flat", highlightthickness=1, highlightbackground=BORDER_COLOR, wrap="word")
             self.txt_initial_note.pack(fill="x", pady=2)
 
-        # Bottom Button Bar
-        btn_bar = tk.Frame(self, bg=BG_PANEL, height=52, highlightthickness=1, highlightbackground=BORDER_COLOR)
-        btn_bar.pack(side="bottom", fill="x", padx=12, pady=(4, 12))
-        btn_bar.pack_propagate(False)
-
-        btn_cancel = tk.Button(
-            btn_bar,
-            text="Cancel",
-            font=FONT_UI,
-            fg=TEXT_PRIMARY,
-            bg=BG_SURFACE,
-            activebackground=BG_ACTIVE,
-            activeforeground=TEXT_PRIMARY,
-            relief="flat",
-            padx=14,
-            pady=4,
-            cursor="hand2",
-            command=self.destroy
-        )
-        btn_cancel.pack(side="right", padx=10, pady=10)
-
-        save_txt = "Save Changes" if self.item else "+ Add Work Item"
-        btn_save = tk.Button(
-            btn_bar,
-            text=save_txt,
-            font=("Segoe UI", 9, "bold"),
-            fg=BG_MAIN,
-            bg=ACCENT_CYAN,
-            activebackground="#79c0ff",
-            activeforeground=BG_MAIN,
-            relief="flat",
-            padx=16,
-            pady=4,
-            cursor="hand2",
-            command=self.on_save
-        )
-        btn_save.pack(side="right", padx=4, pady=10)
 
     def focus_first_input(self):
         self.entry_name.focus_set()
@@ -292,7 +296,7 @@ class ItemDialog(BaseDialog):
 
 
 class ServiceNoteDialog(BaseDialog):
-    """Modal dialog for adding a new maintenance/service note to an item."""
+    """Modal dialog for adding or editing a maintenance/service note for an item."""
     def __init__(self, parent, item, note=None):
         super().__init__(parent, title="Edit Service Note" if note else "Add Service / Maintenance Note")
         self.item = item
@@ -304,7 +308,7 @@ class ServiceNoteDialog(BaseDialog):
     def build_ui(self):
         # Header banner
         header = tk.Frame(self, bg=BG_PANEL, height=50, highlightthickness=1, highlightbackground=BORDER_COLOR)
-        header.pack(fill="x", padx=12, pady=(12, 8))
+        header.pack(side="top", fill="x", padx=12, pady=(12, 8))
         header.pack_propagate(False)
 
         title = "✏️ EDIT SERVICE NOTE" if self.note else "📝 ADD SERVICE NOTE"
@@ -315,9 +319,27 @@ class ServiceNoteDialog(BaseDialog):
         lbl_badge = tk.Label(header, text=item_tag, font=FONT_CODE, fg=TEXT_MUTED, bg=BG_SURFACE, padx=8, pady=3)
         lbl_badge.pack(side="right", padx=14, pady=10)
 
-        # Form
+        # Button Bar (Packed at bottom BEFORE expanding form to ensure visibility)
+        btn_bar = tk.Frame(self, bg=BG_PANEL, height=50, highlightthickness=1, highlightbackground=BORDER_COLOR)
+        btn_bar.pack(side="bottom", fill="x", padx=12, pady=(4, 12))
+        btn_bar.pack_propagate(False)
+
+        btn_cancel = tk.Button(
+            btn_bar, text="Cancel", font=FONT_UI, fg=TEXT_PRIMARY, bg=BG_SURFACE,
+            activebackground=BG_ACTIVE, relief="flat", padx=12, pady=4, cursor="hand2", command=self.destroy
+        )
+        btn_cancel.pack(side="right", padx=10, pady=8)
+
+        save_btn_text = "Update Note" if self.note else "Save Note"
+        btn_save = tk.Button(
+            btn_bar, text=save_btn_text, font=("Segoe UI", 9, "bold"), fg=BG_MAIN, bg=ACCENT_GOLD,
+            activebackground="#ffe58f", relief="flat", padx=14, pady=4, cursor="hand2", command=self.on_save
+        )
+        btn_save.pack(side="right", padx=4, pady=8)
+
+        # Form (Expands to fill cavity between header and button bar)
         form = tk.Frame(self, bg=BG_MAIN)
-        form.pack(fill="both", expand=True, padx=14, pady=4)
+        form.pack(side="top", fill="both", expand=True, padx=14, pady=4)
 
         # Timestamp row
         ts_frame = tk.Frame(form, bg=BG_MAIN)
@@ -331,30 +353,17 @@ class ServiceNoteDialog(BaseDialog):
         self.entry_ts.insert(0, now_str)
 
         # Note Text
-        tk.Label(form, text="Maintenance Performed / Notes *", font=FONT_LABEL, fg=TEXT_MUTED, bg=BG_MAIN).pack(anchor="w")
+        lbl_note_title = "Edit Maintenance Performed / Notes *" if self.note else "Maintenance Performed / Notes *"
+        tk.Label(form, text=lbl_note_title, font=FONT_LABEL, fg=TEXT_MUTED, bg=BG_MAIN).pack(anchor="w")
         self.txt_note = tk.Text(form, font=FONT_UI, bg=BG_SURFACE, fg=TEXT_PRIMARY, insertbackground=TEXT_PRIMARY,
-                                relief="flat", highlightthickness=1, highlightbackground=BORDER_COLOR, wrap="word")
+                                relief="flat", highlightthickness=1, highlightbackground=BORDER_COLOR, wrap="word", height=6)
         self.txt_note.pack(fill="both", expand=True, pady=4)
         if self.note:
             self.txt_note.insert("1.0", self.note.note)
         self.txt_note.focus_set()
 
-        # Button Bar
-        btn_bar = tk.Frame(self, bg=BG_PANEL, height=50, highlightthickness=1, highlightbackground=BORDER_COLOR)
-        btn_bar.pack(side="bottom", fill="x", padx=12, pady=(4, 12))
-        btn_bar.pack_propagate(False)
-
-        btn_cancel = tk.Button(
-            btn_bar, text="Cancel", font=FONT_UI, fg=TEXT_PRIMARY, bg=BG_SURFACE,
-            activebackground=BG_ACTIVE, relief="flat", padx=12, pady=4, cursor="hand2", command=self.destroy
-        )
-        btn_cancel.pack(side="right", padx=10, pady=8)
-
-        btn_save = tk.Button(
-            btn_bar, text="Save Note", font=("Segoe UI", 9, "bold"), fg=BG_MAIN, bg=ACCENT_GOLD,
-            activebackground="#ffe58f", relief="flat", padx=14, pady=4, cursor="hand2", command=self.on_save
-        )
-        btn_save.pack(side="right", padx=4, pady=8)
+        # Keyboard shortcut: Ctrl+Enter to save
+        self.txt_note.bind("<Control-Return>", lambda e: (self.on_save(), "break"))
 
     def on_save(self):
         text = self.txt_note.get("1.0", "end-1c").strip()
@@ -365,6 +374,7 @@ class ServiceNoteDialog(BaseDialog):
         ts = self.entry_ts.get().strip() or datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         self.result = {"note": text, "timestamp": ts}
         self.destroy()
+
 
 
 class ColumnManagerDialog(BaseDialog):

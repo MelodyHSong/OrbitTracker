@@ -114,6 +114,17 @@ class WorkItem:
             return True
         return False
 
+    def edit_note(self, note_id: str, note_text: str, timestamp: str = None) -> bool:
+        """Edits an existing maintenance note in the service log."""
+        for note in self.service_log:
+            if note.id == note_id:
+                note.note = str(note_text).strip()
+                if timestamp:
+                    note.timestamp = timestamp
+                self.touch()
+                return True
+        return False
+
     def touch(self):
         self.updated_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
@@ -126,7 +137,7 @@ class DatabaseManager:
     def __init__(self, db_path: str = None):
         self.db_path = os.path.abspath(db_path or self.DEFAULT_DB_NAME)
         self.app_name = "OrbitTracker"
-        self.version = "1.0.1-dev"
+        self.version = "1.0.2-dev"
         self.queue_prefix = "Q-"
         self.next_queue_id = 1
         self.custom_columns = []  # List of {"id": str, "name": str, "default_val": str}
@@ -160,13 +171,14 @@ class DatabaseManager:
                 data = json.load(f)
 
             self.app_name = data.get("app_name", "OrbitTracker")
-            self.version = data.get("version", "1.0.1-dev")
+            self.version = data.get("version", "1.0.2-dev")
             self.queue_prefix = data.get("queue_prefix", "Q-")
             self.next_queue_id = int(data.get("next_queue_id", 1))
             self.custom_columns = data.get("custom_columns", [])
 
             items_raw = data.get("items", [])
             self.items = [WorkItem.from_dict(it) for it in items_raw]
+            self.update_next_queue_id_from_items()
             self.is_dirty = False
             self.last_saved = datetime.now()
         except Exception as e:
@@ -184,7 +196,7 @@ class DatabaseManager:
             "version": self.version,
             "last_modified": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             "queue_prefix": self.queue_prefix,
-            "next_queue_id": self.next_queue_id,
+            "next_queue_id": self.get_next_queue_id(),
             "custom_columns": self.custom_columns,
             "items": [it.to_dict() for it in self.items]
         }
@@ -201,31 +213,38 @@ class DatabaseManager:
         self.last_saved = datetime.now()
 
     # ==========================================================================
-    # QUEUE NUMBER GENERATION
+    # QUEUE NUMBER GENERATION (Always next following highest one)
     # ==========================================================================
-    def generate_next_queue_number(self) -> str:
-        """Returns the next sequential queue number and auto-increments the counter."""
-        num = self.next_queue_id
-        # Format as Q-001, Q-002, etc.
-        q_str = f"{self.queue_prefix}{num:03d}"
-        return q_str
-
-    def peek_next_queue_number(self) -> str:
-        """Previews the next queue number without incrementing."""
-        return f"{self.queue_prefix}{self.next_queue_id:03d}"
-
-    def update_next_queue_id_from_items(self):
-        """Ensures next_queue_id is always greater than any existing Q-xxx numbers."""
-        max_id = self.next_queue_id
+    def get_highest_queue_id(self) -> int:
+        """Finds the maximum integer queue number suffix among all existing items."""
+        max_id = 0
         for it in self.items:
-            q = it.queue_number
+            q = (it.queue_number or "").strip()
             if q.startswith(self.queue_prefix):
                 suffix = q[len(self.queue_prefix):]
                 if suffix.isdigit():
                     val = int(suffix)
-                    if val >= max_id:
-                        max_id = val + 1
-        self.next_queue_id = max_id
+                    if val > max_id:
+                        max_id = val
+        return max_id
+
+    def get_next_queue_id(self) -> int:
+        """Returns the next sequential integer ID following the highest existing item."""
+        return self.get_highest_queue_id() + 1
+
+    def generate_next_queue_number(self) -> str:
+        """Returns the next sequential queue number that follows the highest existing one."""
+        next_id = self.get_next_queue_id()
+        self.next_queue_id = next_id + 1
+        return f"{self.queue_prefix}{next_id:03d}"
+
+    def peek_next_queue_number(self) -> str:
+        """Previews the next sequential queue number following the highest existing one."""
+        return f"{self.queue_prefix}{self.get_next_queue_id():03d}"
+
+    def update_next_queue_id_from_items(self):
+        """Ensures next_queue_id is always the next ID following the highest existing queue number."""
+        self.next_queue_id = self.get_next_queue_id()
 
     # ==========================================================================
     # ITEM CRUD
@@ -245,9 +264,8 @@ class DatabaseManager:
         """Adds a new work item with auto-generated queue number and optional initial service note."""
         if not queue_number:
             queue_number = self.generate_next_queue_number()
-            self.next_queue_id += 1
         else:
-            self.update_next_queue_id_from_items()
+            queue_number = queue_number.strip()
 
         # Initialize any custom fields with default values
         fields = {}
@@ -272,6 +290,7 @@ class DatabaseManager:
             item.add_note(initial_note)
 
         self.items.append(item)
+        self.update_next_queue_id_from_items()
         self.is_dirty = True
         return item
 
@@ -294,6 +313,7 @@ class DatabaseManager:
 
         if queue_number is not None:
             item.queue_number = queue_number.strip()
+            self.update_next_queue_id_from_items()
         if moc_number is not None:
             item.moc_number = moc_number.strip()
         if st_number is not None:
@@ -318,6 +338,7 @@ class DatabaseManager:
         before = len(self.items)
         self.items = [it for it in self.items if it.id != item_id]
         if len(self.items) < before:
+            self.update_next_queue_id_from_items()
             self.is_dirty = True
             return True
         return False
@@ -357,6 +378,16 @@ class DatabaseManager:
         if not item:
             return False
         res = item.delete_note(note_id)
+        if res:
+            self.is_dirty = True
+        return res
+
+    def update_service_note(self, item_id: str, note_id: str, note_text: str, timestamp: str = None) -> bool:
+        """Updates an existing maintenance note in an item's service log."""
+        item = self.get_item_by_id(item_id)
+        if not item:
+            return False
+        res = item.edit_note(note_id, note_text, timestamp)
         if res:
             self.is_dirty = True
         return res

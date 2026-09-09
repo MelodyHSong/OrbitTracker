@@ -132,7 +132,7 @@ class OrbitTrackerApp:
     def load_config(self):
         default_config = {
             "app_name": "OrbitTracker",
-            "version": "1.0.1-dev",
+            "version": "1.0.2-dev",
             "database_path": "orbit_database.json",
             "preferences": {
                 "autosave_enabled": True,
@@ -1077,7 +1077,14 @@ class OrbitTrackerApp:
             activebackground=BG_ACTIVE, activeforeground=ACCENT_CORAL, relief="flat", padx=3, cursor="hand2",
             command=lambda n_id=note.id: self.on_delete_service_note(item.id, n_id)
         )
-        btn_del_note.pack(side="right")
+        btn_del_note.pack(side="right", padx=(2, 0))
+
+        btn_edit_note = tk.Button(
+            top, text="✏", font=("Segoe UI", 7), fg=TEXT_MUTED, bg=BG_SURFACE,
+            activebackground=BG_ACTIVE, activeforeground=ACCENT_GOLD, relief="flat", padx=3, cursor="hand2",
+            command=lambda n=note: self.on_edit_service_note(item.id, n)
+        )
+        btn_edit_note.pack(side="right", padx=(0, 2))
 
         # Note Content
         lbl_note = tk.Label(
@@ -1090,6 +1097,10 @@ class OrbitTrackerApp:
             justify="left"
         )
         lbl_note.pack(anchor="w")
+
+        # Double-click card or note text to edit natively
+        card.bind("<Double-Button-1>", lambda e, n=note: self.on_edit_service_note(item.id, n))
+        lbl_note.bind("<Double-Button-1>", lambda e, n=note: self.on_edit_service_note(item.id, n))
 
     # ==========================================================================
     # ITEM ACTIONS (ADD, EDIT, DELETE, DUPLICATE)
@@ -1224,6 +1235,23 @@ class OrbitTrackerApp:
             self.refresh_table()
             self.update_metrics_cards()
             self.trigger_autosave_if_enabled()
+
+    def on_edit_service_note(self, item_id, note):
+        item = self.db.get_item_by_id(item_id)
+        if not item:
+            return
+
+        dlg = ServiceNoteDialog(self.root, item, note=note)
+        self.root.wait_window(dlg)
+        if dlg.result:
+            new_text = dlg.result["note"]
+            new_ts = dlg.result["timestamp"]
+            updated = self.db.update_service_note(item.id, note.id, new_text, new_ts)
+            if updated:
+                self.log_message(f"Updated service note for [{item.queue_number}]", level="SUCCESS")
+                self.refresh_table()
+                self.update_metrics_cards()
+                self.trigger_autosave_if_enabled()
 
     def on_quick_add_note(self):
         if not self.selected_item_id:

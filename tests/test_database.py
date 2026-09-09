@@ -48,9 +48,20 @@ def test_database_lifecycle():
         assert len(item2.service_log) == 0
 
         # 4. Add notes to item2
-        db.add_service_note(item2.id, "Received from manufacturer, awaiting firmware flash.")
-        db.add_service_note(item2.id, "Firmware updated to v2.4.1. Calibrated successfully.")
+        note1 = db.add_service_note(item2.id, "Received from manufacturer, awaiting firmware flash.")
+        note2 = db.add_service_note(item2.id, "Firmware updated to v2.4.1. Calibrated successfully.")
         assert len(item2.service_log) == 2
+
+        # 4b. Test editing service notes
+        success = db.update_service_note(item2.id, note1.id, "Received from vendor; firmware flash scheduled.", "2026-09-08 10:00:00")
+        assert success is True
+        assert item2.service_log[0].note == "Received from vendor; firmware flash scheduled."
+        assert item2.service_log[0].timestamp == "2026-09-08 10:00:00"
+        assert db.is_dirty is True
+
+        # Test editing with nonexistent note or item ID
+        assert db.update_service_note(item2.id, "nonexistent-id", "New text") is False
+        assert db.update_service_note("nonexistent-item", note1.id, "New text") is False
 
         # 5. Add custom column
         col = db.add_custom_column("Facility Bay", default_val="Main Hangar")
@@ -101,6 +112,28 @@ def test_database_lifecycle():
         csv_file = os.path.join(temp_dir, "test_export.csv")
         db2.export_csv(csv_file)
         assert os.path.exists(csv_file)
+
+        # 11. Test Queue number always follows the highest one
+        # Currently items are Q-001 and Q-002, so next is Q-003
+        assert db2.peek_next_queue_number() == "Q-003"
+        item_high = db2.add_item(
+            moc_number="MOC-1050",
+            st_number="ST-5555",
+            item_name="Deep Space Comm Array",
+            make_and_model="General Dynamics DS-10",
+            queue_number="Q-050"
+        )
+        assert item_high.queue_number == "Q-050"
+        # Next should now follow highest (50 -> 51)
+        assert db2.peek_next_queue_number() == "Q-051"
+
+        # Update queue number of an item higher (50 -> 75)
+        db2.update_item(item_high.id, queue_number="Q-075")
+        assert db2.peek_next_queue_number() == "Q-076"
+
+        # Delete highest item; next should drop back to Q-003
+        db2.delete_item(item_high.id)
+        assert db2.peek_next_queue_number() == "Q-003"
 
         print("[OK] Database tests passed.")
     finally:

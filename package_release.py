@@ -26,7 +26,7 @@ DIST_DIR = os.path.join(BASE_DIR, "dist")
 # ☆ RELEASE CONFIGURATION
 # ==============================================================================
 APP_NAME = "OrbitTracker"
-VERSION = "1.0.2-dev"
+VERSION = "1.0.3-dev"
 DIST_EXE_NAME = "orbittracker.exe"
 SPEC_FILE_NAME = "orbittracker.spec"
 

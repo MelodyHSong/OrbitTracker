@@ -139,5 +139,137 @@ def test_database_lifecycle():
     finally:
         shutil.rmtree(temp_dir, ignore_errors=True)
 
+def test_structured_notes_and_analytics():
+    temp_dir = tempfile.mkdtemp()
+    db_file = os.path.join(temp_dir, "test_structured.json")
+
+    try:
+        db = DatabaseManager(db_file)
+
+        # 1. Add item with structured initial note data
+        item1 = db.add_item(
+            moc_number="MOC-8800",
+            st_number="ST-4401",
+            item_name="Cryogenic Expansion Valve",
+            make_and_model="Parker Hannifin Cryo-4",
+            department="Cryogenics & Propulsion",
+            initial_note_data={
+                "problem": "Seal bypass during pressure cycle",
+                "root_cause": "Thermal cycling fatigue on Teflon gasket",
+                "action_taken": "Installed cryo-rated graphite seal assembly",
+                "parts_consumed": "Gasket Pack #GRP-99",
+                "note_type": "maintenance"
+            }
+        )
+        assert len(item1.service_log) == 1
+        n1 = item1.service_log[0]
+        assert n1.note_type == "maintenance"
+        assert n1.problem == "Seal bypass during pressure cycle"
+        assert n1.root_cause == "Thermal cycling fatigue on Teflon gasket"
+        assert n1.action_taken == "Installed cryo-rated graphite seal assembly"
+        assert n1.parts_consumed == "Gasket Pack #GRP-99"
+        assert "Problem:" in n1.note and "Action:" in n1.note
+
+        # 2. Add quick note to item1
+        qn = db.add_service_note(
+            item1.id,
+            note_type="quick",
+            quick_note="Cryo specialist signed off inspection"
+        )
+        assert qn.note_type == "quick"
+        assert qn.quick_note == "Cryo specialist signed off inspection"
+        assert qn.note == "Cryo specialist signed off inspection"
+        assert len(item1.service_log) == 2
+
+        # 3. Add second item and add structured note
+        item2 = db.add_item(
+            moc_number="MOC-8801",
+            st_number="ST-4402",
+            item_name="Inertial Gyro Sensor",
+            make_and_model="Honeywell HG-400",
+            department="Avionics & Guidance"
+        )
+        n2 = db.add_service_note(
+            item2.id,
+            note_type="maintenance",
+            problem="Drift detected on Z-axis accelerometer",
+            root_cause="Vibration resonance",
+            action_taken="Re-anchored mounting bracket with dampeners",
+            parts_consumed="Silicone Damper Bushings"
+        )
+        assert n2.problem == "Drift detected on Z-axis accelerometer"
+        assert n2.root_cause == "Vibration resonance"
+
+        # 4. Save and reload to verify JSON serialization & deserialization
+        db.save()
+        db2 = DatabaseManager(db_file)
+        r_item1 = db2.get_item_by_id(item1.id)
+        assert len(r_item1.service_log) == 2
+        assert r_item1.service_log[0].problem == "Seal bypass during pressure cycle"
+        assert r_item1.service_log[0].parts_consumed == "Gasket Pack #GRP-99"
+        assert r_item1.service_log[1].note_type == "quick"
+        assert r_item1.service_log[1].quick_note == "Cryo specialist signed off inspection"
+
+        # 5. Test Backward Compatibility: load legacy database with old schema
+        legacy_file = os.path.join(temp_dir, "legacy_db.json")
+        legacy_data = {
+            "app_name": "OrbitTracker",
+            "version": "1.0.0",
+            "queue_prefix": "Q-",
+            "next_queue_id": 2,
+            "custom_columns": [],
+            "items": [
+                {
+                    "id": "legacy-item-1",
+                    "queue_number": "Q-001",
+                    "moc_number": "MOC-OLD-1",
+                    "st_number": "ST-OLD-1",
+                    "item_name": "Old Solar Inverter",
+                    "make_and_model": "Legacy Power Systems",
+                    "status": "Active",
+                    "department": "Power & Solar",
+                    "custom_fields": {},
+                    "service_log": [
+                        {
+                            "id": "old-note-1",
+                            "timestamp": "2025-01-15 08:30:00",
+                            "note": "Legacy maintenance note without structured fields."
+                        }
+                    ],
+                    "created_at": "2025-01-15 08:00:00",
+                    "updated_at": "2025-01-15 08:30:00"
+                }
+            ]
+        }
+        import json
+        with open(legacy_file, "w", encoding="utf-8") as f:
+            json.dump(legacy_data, f)
+
+        db_legacy = DatabaseManager(legacy_file)
+        assert len(db_legacy.items) == 1
+        leg_it = db_legacy.items[0]
+        assert len(leg_it.service_log) == 1
+        leg_note = leg_it.service_log[0]
+        assert leg_note.note == "Legacy maintenance note without structured fields."
+        assert leg_note.problem == "Legacy maintenance note without structured fields."
+        assert leg_note.note_type == "maintenance"
+
+        # 6. Test Analytics calculation
+        analytics = db2.get_work_analytics()
+        assert analytics["total_items"] == 2
+        assert analytics["total_notes"] == 3
+        assert analytics["maintenance_notes_count"] == 2
+        assert analytics["quick_notes_count"] == 1
+        assert analytics["parts_consumed_count"] == 2
+        assert len(analytics["timeline_monthly"]) >= 1
+        assert len(analytics["dept_work"]) == 2
+        assert len(analytics["parts_list"]) == 2
+
+        print("[OK] Structured notes, backward compatibility & analytics tests passed.")
+    finally:
+        shutil.rmtree(temp_dir, ignore_errors=True)
+
 if __name__ == "__main__":
     test_database_lifecycle()
+    test_structured_notes_and_analytics()
+

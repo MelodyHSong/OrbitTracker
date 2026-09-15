@@ -11,25 +11,99 @@ from datetime import datetime
 
 
 class ServiceNote:
-    """Represents a single maintenance or work note for a tracked item."""
-    def __init__(self, note: str, timestamp: str = None, note_id: str = None):
+    """Represents a single maintenance record or quick note for a tracked item."""
+    def __init__(
+        self,
+        note: str = "",
+        timestamp: str = None,
+        note_id: str = None,
+        note_type: str = "maintenance",
+        problem: str = "",
+        root_cause: str = "",
+        action_taken: str = "",
+        parts_consumed: str = "",
+        quick_note: str = ""
+    ):
         self.id = note_id or str(uuid.uuid4())[:8]
         self.timestamp = timestamp or datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        self.note = str(note).strip()
+        self.note_type = "quick" if str(note_type).strip().lower() == "quick" else "maintenance"
+        self.problem = str(problem or "").strip()
+        self.root_cause = str(root_cause or "").strip()
+        self.action_taken = str(action_taken or "").strip()
+        self.parts_consumed = str(parts_consumed or "").strip()
+        self.quick_note = str(quick_note or "").strip()
+
+        # Backward compatibility & display string synthesis
+        if self.note_type == "quick":
+            if not self.quick_note and note:
+                self.quick_note = str(note).strip()
+            self.note = self.quick_note
+        else:
+            if not self.problem and note:
+                self.problem = str(note).strip()
+
+            # Synthesize human-readable string representation for self.note
+            if not self.root_cause and not self.action_taken and not self.parts_consumed:
+                self.note = self.problem or str(note or "").strip()
+            else:
+                parts = []
+                if self.problem:
+                    parts.append(f"Problem: {self.problem}")
+                if self.root_cause:
+                    parts.append(f"Root Cause: {self.root_cause}")
+                if self.action_taken:
+                    parts.append(f"Action: {self.action_taken}")
+                if self.parts_consumed:
+                    parts.append(f"Parts: {self.parts_consumed}")
+                self.note = " | ".join(parts) if parts else str(note or "").strip()
 
     def to_dict(self):
         return {
             "id": self.id,
             "timestamp": self.timestamp,
+            "note_type": self.note_type,
+            "problem": self.problem,
+            "root_cause": self.root_cause,
+            "action_taken": self.action_taken,
+            "parts_consumed": self.parts_consumed,
+            "quick_note": self.quick_note,
             "note": self.note
         }
 
     @classmethod
     def from_dict(cls, data):
+        raw_note = data.get("note", "")
+        # If explicitly marked as quick note or has quick_note without problem
+        if data.get("note_type") == "quick" or ("quick_note" in data and not data.get("problem")):
+            return cls(
+                note=raw_note,
+                timestamp=data.get("timestamp"),
+                note_id=data.get("id"),
+                note_type="quick",
+                quick_note=data.get("quick_note", raw_note)
+            )
+
+        # If structured fields exist
+        if "problem" in data or "action_taken" in data or "root_cause" in data or "parts_consumed" in data:
+            return cls(
+                note=raw_note,
+                timestamp=data.get("timestamp"),
+                note_id=data.get("id"),
+                note_type=data.get("note_type", "maintenance"),
+                problem=data.get("problem", raw_note),
+                root_cause=data.get("root_cause", ""),
+                action_taken=data.get("action_taken", ""),
+                parts_consumed=data.get("parts_consumed", ""),
+                quick_note=data.get("quick_note", "")
+            )
+
+        # Legacy database entry (only 'note' key exists):
         return cls(
-            note=data.get("note", ""),
+            note=raw_note,
             timestamp=data.get("timestamp"),
-            note_id=data.get("id")
+            note_id=data.get("id"),
+            note_type="maintenance",
+            problem=raw_note
         )
 
 
@@ -100,8 +174,38 @@ class WorkItem:
             updated_at=data.get("updated_at")
         )
 
-    def add_note(self, note_text: str, timestamp: str = None) -> ServiceNote:
-        note = ServiceNote(note=note_text, timestamp=timestamp)
+    def add_note(
+        self,
+        note_text: str = "",
+        timestamp: str = None,
+        note_type: str = "maintenance",
+        problem: str = "",
+        root_cause: str = "",
+        action_taken: str = "",
+        parts_consumed: str = "",
+        quick_note: str = ""
+    ) -> ServiceNote:
+        """Adds a service note (either structured maintenance record or quick note)."""
+        if isinstance(note_text, dict):
+            note = ServiceNote.from_dict(note_text)
+        elif note_type == "quick":
+            q_txt = quick_note or note_text
+            note = ServiceNote(
+                note=q_txt,
+                timestamp=timestamp,
+                note_type="quick",
+                quick_note=q_txt
+            )
+        else:
+            note = ServiceNote(
+                note=note_text,
+                timestamp=timestamp,
+                note_type=note_type,
+                problem=problem or note_text,
+                root_cause=root_cause,
+                action_taken=action_taken,
+                parts_consumed=parts_consumed
+            )
         self.service_log.append(note)
         self.touch()
         return note
@@ -114,13 +218,57 @@ class WorkItem:
             return True
         return False
 
-    def edit_note(self, note_id: str, note_text: str, timestamp: str = None) -> bool:
-        """Edits an existing maintenance note in the service log."""
+    def edit_note(
+        self,
+        note_id: str,
+        note_text: str = None,
+        timestamp: str = None,
+        note_type: str = None,
+        problem: str = None,
+        root_cause: str = None,
+        action_taken: str = None,
+        parts_consumed: str = None,
+        quick_note: str = None
+    ) -> bool:
+        """Edits an existing maintenance note or quick note in the service log."""
         for note in self.service_log:
             if note.id == note_id:
-                note.note = str(note_text).strip()
                 if timestamp:
                     note.timestamp = timestamp
+                if note_type is not None:
+                    note.note_type = note_type
+                if quick_note is not None:
+                    note.quick_note = str(quick_note).strip()
+                if problem is not None:
+                    note.problem = str(problem).strip()
+                if root_cause is not None:
+                    note.root_cause = str(root_cause).strip()
+                if action_taken is not None:
+                    note.action_taken = str(action_taken).strip()
+                if parts_consumed is not None:
+                    note.parts_consumed = str(parts_consumed).strip()
+
+                if note.note_type == "quick":
+                    if note_text is not None and not quick_note:
+                        note.quick_note = str(note_text).strip()
+                    note.note = note.quick_note
+                else:
+                    if note_text is not None and problem is None:
+                        note.problem = str(note_text).strip()
+                    if not note.root_cause and not note.action_taken and not note.parts_consumed:
+                        note.note = note.problem or (note_text or note.note)
+                    else:
+                        parts = []
+                        if note.problem:
+                            parts.append(f"Problem: {note.problem}")
+                        if note.root_cause:
+                            parts.append(f"Root Cause: {note.root_cause}")
+                        if note.action_taken:
+                            parts.append(f"Action: {note.action_taken}")
+                        if note.parts_consumed:
+                            parts.append(f"Parts: {note.parts_consumed}")
+                        note.note = " | ".join(parts) if parts else (note_text or note.note)
+
                 self.touch()
                 return True
         return False
@@ -137,7 +285,7 @@ class DatabaseManager:
     def __init__(self, db_path: str = None):
         self.db_path = os.path.abspath(db_path or self.DEFAULT_DB_NAME)
         self.app_name = "OrbitTracker"
-        self.version = "1.0.2-dev"
+        self.version = "1.0.3-dev"
         self.queue_prefix = "Q-"
         self.next_queue_id = 1
         self.custom_columns = []  # List of {"id": str, "name": str, "default_val": str}
@@ -171,7 +319,7 @@ class DatabaseManager:
                 data = json.load(f)
 
             self.app_name = data.get("app_name", "OrbitTracker")
-            self.version = data.get("version", "1.0.2-dev")
+            self.version = data.get("version", "1.0.3-dev")
             self.queue_prefix = data.get("queue_prefix", "Q-")
             self.next_queue_id = int(data.get("next_queue_id", 1))
             self.custom_columns = data.get("custom_columns", [])
@@ -259,7 +407,8 @@ class DatabaseManager:
         department: str = "",
         custom_fields: dict = None,
         initial_note: str = None,
-        queue_number: str = None
+        queue_number: str = None,
+        initial_note_data: dict = None
     ) -> WorkItem:
         """Adds a new work item with auto-generated queue number and optional initial service note."""
         if not queue_number:
@@ -286,7 +435,18 @@ class DatabaseManager:
             custom_fields=fields
         )
 
-        if initial_note and str(initial_note).strip():
+        if initial_note_data:
+            item.add_note(
+                note_text=initial_note_data.get("note", ""),
+                timestamp=initial_note_data.get("timestamp"),
+                note_type=initial_note_data.get("note_type", "maintenance"),
+                problem=initial_note_data.get("problem", ""),
+                root_cause=initial_note_data.get("root_cause", ""),
+                action_taken=initial_note_data.get("action_taken", ""),
+                parts_consumed=initial_note_data.get("parts_consumed", ""),
+                quick_note=initial_note_data.get("quick_note", "")
+            )
+        elif initial_note and str(initial_note).strip():
             item.add_note(initial_note)
 
         self.items.append(item)
@@ -363,12 +523,32 @@ class DatabaseManager:
     # ==========================================================================
     # SERVICE LOG OPERATIONS
     # ==========================================================================
-    def add_service_note(self, item_id: str, note_text: str, timestamp: str = None) -> ServiceNote:
-        """Adds a maintenance note to an item's service log."""
+    def add_service_note(
+        self,
+        item_id: str,
+        note_text: str = "",
+        timestamp: str = None,
+        note_type: str = "maintenance",
+        problem: str = "",
+        root_cause: str = "",
+        action_taken: str = "",
+        parts_consumed: str = "",
+        quick_note: str = ""
+    ) -> ServiceNote:
+        """Adds a maintenance note or quick note to an item's service log."""
         item = self.get_item_by_id(item_id)
         if not item:
             raise KeyError(f"Item not found: {item_id}")
-        note = item.add_note(note_text, timestamp)
+        note = item.add_note(
+            note_text=note_text,
+            timestamp=timestamp,
+            note_type=note_type,
+            problem=problem,
+            root_cause=root_cause,
+            action_taken=action_taken,
+            parts_consumed=parts_consumed,
+            quick_note=quick_note
+        )
         self.is_dirty = True
         return note
 
@@ -382,12 +562,34 @@ class DatabaseManager:
             self.is_dirty = True
         return res
 
-    def update_service_note(self, item_id: str, note_id: str, note_text: str, timestamp: str = None) -> bool:
-        """Updates an existing maintenance note in an item's service log."""
+    def update_service_note(
+        self,
+        item_id: str,
+        note_id: str,
+        note_text: str = None,
+        timestamp: str = None,
+        note_type: str = None,
+        problem: str = None,
+        root_cause: str = None,
+        action_taken: str = None,
+        parts_consumed: str = None,
+        quick_note: str = None
+    ) -> bool:
+        """Updates an existing maintenance note or quick note in an item's service log."""
         item = self.get_item_by_id(item_id)
         if not item:
             return False
-        res = item.edit_note(note_id, note_text, timestamp)
+        res = item.edit_note(
+            note_id=note_id,
+            note_text=note_text,
+            timestamp=timestamp,
+            note_type=note_type,
+            problem=problem,
+            root_cause=root_cause,
+            action_taken=action_taken,
+            parts_consumed=parts_consumed,
+            quick_note=quick_note
+        )
         if res:
             self.is_dirty = True
         return res
@@ -491,7 +693,14 @@ class DatabaseManager:
                     fields_to_check.append(str(val))
                 # Check notes
                 for n in it.service_log:
-                    fields_to_check.append(n.note)
+                    fields_to_check.extend([
+                        n.note,
+                        n.problem,
+                        n.root_cause,
+                        n.action_taken,
+                        n.parts_consumed,
+                        n.quick_note
+                    ])
 
                 matched = any(q_clean in str(val).lower() for val in fields_to_check)
                 if not matched:
@@ -540,11 +749,113 @@ class DatabaseManager:
         active = sum(1 for it in self.items if it.status == "Active")
         inactive = total - active
         total_notes = sum(len(it.service_log) for it in self.items)
+        total_maint = sum(sum(1 for n in it.service_log if n.note_type != "quick") for it in self.items)
+        total_quick = sum(sum(1 for n in it.service_log if n.note_type == "quick") for it in self.items)
         return {
             "total_items": total,
             "active_items": active,
             "inactive_items": inactive,
-            "total_notes": total_notes
+            "total_notes": total_notes,
+            "total_maintenance_notes": total_maint,
+            "total_quick_notes": total_quick
+        }
+
+    def get_work_analytics(self) -> dict:
+        """Calculates comprehensive work performance and maintenance statistics across all work items."""
+        from collections import defaultdict
+
+        total_items = len(self.items)
+        active_items = sum(1 for it in self.items if it.status == "Active")
+        inactive_items = total_items - active_items
+
+        all_notes = []
+        for it in self.items:
+            for n in it.service_log:
+                all_notes.append((it, n))
+
+        total_notes = len(all_notes)
+        maint_notes_count = sum(1 for _, n in all_notes if n.note_type != "quick")
+        quick_notes_count = sum(1 for _, n in all_notes if n.note_type == "quick")
+        parts_consumed_count = sum(1 for _, n in all_notes if n.parts_consumed)
+
+        # 1. Timeline Activity by Month (e.g. '2026-09')
+        timeline_monthly = defaultdict(lambda: {"maintenance": 0, "quick": 0, "total": 0})
+        for _, n in all_notes:
+            month_key = n.timestamp[:7] if len(n.timestamp) >= 7 else "Unknown"
+            if n.note_type == "quick":
+                timeline_monthly[month_key]["quick"] += 1
+            else:
+                timeline_monthly[month_key]["maintenance"] += 1
+            timeline_monthly[month_key]["total"] += 1
+        sorted_timeline = sorted(timeline_monthly.items(), key=lambda x: x[0])
+
+        # 2. Work by Department
+        dept_work = defaultdict(lambda: {"maintenance": 0, "quick": 0, "items": 0})
+        for it in self.items:
+            d = it.department or "Unassigned"
+            dept_work[d]["items"] += 1
+            for n in it.service_log:
+                if n.note_type == "quick":
+                    dept_work[d]["quick"] += 1
+                else:
+                    dept_work[d]["maintenance"] += 1
+        sorted_dept_work = sorted(
+            dept_work.items(),
+            key=lambda x: (x[1]["maintenance"] + x[1]["quick"]),
+            reverse=True
+        )
+
+        # 3. Equipment Service Intensity (Top Serviced Items)
+        item_intensity = []
+        for it in self.items:
+            m_cnt = sum(1 for n in it.service_log if n.note_type != "quick")
+            q_cnt = sum(1 for n in it.service_log if n.note_type == "quick")
+            p_cnt = sum(1 for n in it.service_log if n.parts_consumed)
+            item_intensity.append({
+                "id": it.id,
+                "queue_number": it.queue_number,
+                "item_name": it.item_name,
+                "department": it.department,
+                "status": it.status,
+                "total_notes": len(it.service_log),
+                "maintenance_notes": m_cnt,
+                "quick_notes": q_cnt,
+                "parts_actions": p_cnt
+            })
+        item_intensity.sort(key=lambda x: x["total_notes"], reverse=True)
+
+        # 4. Root Cause Frequencies
+        root_causes = defaultdict(int)
+        for _, n in all_notes:
+            rc = n.root_cause.strip()
+            if rc:
+                root_causes[rc.title()] += 1
+        sorted_root_causes = sorted(root_causes.items(), key=lambda x: x[1], reverse=True)
+
+        # 5. Parts Consumed Breakdown
+        parts_list = []
+        for it, n in all_notes:
+            if n.parts_consumed:
+                parts_list.append({
+                    "queue_number": it.queue_number,
+                    "item_name": it.item_name,
+                    "parts": n.parts_consumed,
+                    "timestamp": n.timestamp
+                })
+
+        return {
+            "total_items": total_items,
+            "active_items": active_items,
+            "inactive_items": inactive_items,
+            "total_notes": total_notes,
+            "maintenance_notes_count": maint_notes_count,
+            "quick_notes_count": quick_notes_count,
+            "parts_consumed_count": parts_consumed_count,
+            "timeline_monthly": sorted_timeline,
+            "dept_work": sorted_dept_work,
+            "item_intensity": item_intensity,
+            "root_causes": sorted_root_causes,
+            "parts_list": parts_list
         }
 
     # ==========================================================================
@@ -562,8 +873,12 @@ class DatabaseManager:
             "Make and Model",
             "Status",
             "Department",
-            "Notes Count",
-            "Latest Note"
+            "Total Notes",
+            "Maintenance Notes",
+            "Quick Notes",
+            "Latest Problem",
+            "Latest Action",
+            "Latest Parts Consumed"
         ]
         custom_cols = self.custom_columns
         for c in custom_cols:
@@ -575,9 +890,12 @@ class DatabaseManager:
             writer.writerow(headers)
 
             for it in self.items:
-                latest_note = it.service_log[-1].note if it.service_log else ""
+                m_notes = [n for n in it.service_log if n.note_type != "quick"]
+                q_notes = [n for n in it.service_log if n.note_type == "quick"]
+                latest_m = m_notes[-1] if m_notes else None
+
                 all_notes_str = " | ".join(
-                    f"[{n.timestamp}] {n.note}" for n in it.service_log
+                    f"[{n.timestamp} - {n.note_type.upper()}] {n.note}" for n in it.service_log
                 )
                 row = [
                     it.queue_number,
@@ -588,7 +906,11 @@ class DatabaseManager:
                     it.status,
                     it.department,
                     len(it.service_log),
-                    latest_note
+                    len(m_notes),
+                    len(q_notes),
+                    latest_m.problem if latest_m else (it.service_log[-1].note if it.service_log else ""),
+                    latest_m.action_taken if latest_m else "",
+                    latest_m.parts_consumed if latest_m else ""
                 ]
                 for c in custom_cols:
                     row.append(it.custom_fields.get(c["id"], ""))

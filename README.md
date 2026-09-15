@@ -20,13 +20,28 @@
   - **Department**: Assigned department with autocomplete suggestions from existing records.
   - **Service Log**: Chronological maintenance history timeline for each item.
 - **⚙️ Dynamic Custom Columns**: Add new user-defined fields (e.g. *Facility Bay*, *Serial Number*, *Assigned Technician*, *Priority*) at runtime. All items instantly inherit the schema.
-- **🛠️ Service Log Timeline**:
-  - View full maintenance histories in reverse chronological order.
-  - **Native In-App Note Editing**: Edit existing maintenance notes directly via timeline edit buttons (`✏`) or double-clicking any note card without needing to open the JSON file.
+- **🛠️ Structured Service Note Diagnostics & Quick Notes**:
+  - **Structured Maintenance Logs**: Comprehensive engineering log entries with dedicated fields:
+    - `Problem *` (Required): Core fault, failure mode, or inspection reason.
+    - `Root Cause` (Optional): Underlying mechanical, electrical, or procedural cause.
+    - `Action Taken` (Optional): Remediation steps, repairs, or procedures performed.
+    - `Parts/Materials Consumed` (Optional): Replacement parts, serials, gaskets, lubricants, and materials used.
+  - **Dedicated Quick Notes**: Lightweight operational memos and shift handoffs visually distinguished with a dedicated `⚡ Quick Note` badge.
+  - **Dual-Channel Timeline Filtering**: Filter notes instantly between `All`, `🛠️ Maintenance`, and `⚡ Quick Notes`.
+  - **Native In-App Note Editing**: Edit existing notes directly via timeline edit buttons (`✏`) or double-clicking any note card.
   - Quick inline logging directly from the inspector panel without modal dialogs.
   - Timestamped notes with full edit and delete capabilities.
+- **📊 Interactive Work Performance & Analytics Dashboard**:
+  - Dedicated multi-tab vector canvas visualization modal accessible via header button, sidebar, or `Ctrl + G`.
+  - **5 Interactive Analytical Views**:
+    - **Activity Over Time**: Monthly service volume trends and activity velocity.
+    - **Work by Department**: Comparative workload distributions across engineering units.
+    - **Equipment Service Intensity**: High-maintenance equipment ranking and service frequency.
+    - **Root Cause Breakdown**: Pareto distribution of failure modes and root causes.
+    - **Parts Consumed Inventory**: Comprehensive parts utilization registry and consumption frequencies.
+  - **Interactive Features**: Dynamic tooltips on hover, real-time KPI metrics, and lower data grid breakdowns.
 - **🔍 Instant Multi-Field Search & Filter**:
-  - Live search across all core attributes, custom fields, and maintenance note content.
+  - Live search across all core attributes, custom fields, and maintenance note content (including problem, root cause, action taken, and parts consumed).
   - Segmented status filtering (`All`, `Active`, `Inactive`).
   - Dropdown filter by Department.
 - **📊 Real-Time Metrics & KPI Cards**:
@@ -36,7 +51,7 @@
 - **🌱 Smart Database Initialization**: Missing or fresh database paths prompt users with a choice to load demo equipment data or start with a clean empty database.
 - **🛡️ Protected Database Deletion**: Permanent file deletion requires typing `"DELETE DATABASE"` in a confirmation modal to safeguard against accidental data loss.
 - **🔄 Workspace State Persistence**: Automatically remembers and reopens the last opened database on launch.
-- **📤 Export Capabilities**: 1-click export to standard CSV format including custom columns and formatted service history summaries.
+- **📤 Export Capabilities**: 1-click export to standard CSV format including custom columns and structured service history columns (Problem, Root Cause, Action Taken, Parts Consumed, Note Type).
 - **🎨 Cosmic Dark Workstation Aesthetic**: High-DPI scaling, custom Tkinter and TTK clam theme, custom multi-resolution icon (`.ico`), and activity console.
 
 ---
@@ -67,8 +82,8 @@ Databases are saved by default to `orbit_database.json` in the application direc
 ```json
 {
   "app_name": "OrbitTracker",
-  "version": "1.0.2-dev",
-  "last_modified": "2026-09-08 20:30:00",
+  "version": "1.0.3-dev",
+  "last_modified": "2026-09-14 20:30:00",
   "queue_prefix": "Q-",
   "next_queue_id": 4,
   "custom_columns": [
@@ -94,12 +109,16 @@ Databases are saved by default to `orbit_database.json` in the application direc
       "service_log": [
         {
           "id": "4b219cf0",
-          "timestamp": "2026-09-07 14:15:00",
-          "note": "Replaced high-pressure mechanical seal and verified casing alignment."
+          "timestamp": "2026-09-14 14:15:00",
+          "note_type": "maintenance",
+          "problem": "Seal leakage detected during high-pressure run",
+          "root_cause": "Thermal cycling degraded elastomer O-ring",
+          "action_taken": "Replaced mechanical seal assembly and re-torqued casing bolts",
+          "parts_consumed": "Seal Kit #SK-401, Viton O-Ring #OR-88"
         }
       ],
-      "created_at": "2026-09-07 14:00:00",
-      "updated_at": "2026-09-07 14:15:00"
+      "created_at": "2026-09-14 14:00:00",
+      "updated_at": "2026-09-14 14:15:00"
     }
   ]
 }
@@ -116,6 +135,7 @@ Databases are saved by default to `orbit_database.json` in the application direc
 | `Ctrl + O` | Open Existing Database File |
 | `Ctrl + E` | Export Records to CSV |
 | `Ctrl + F` | Focus Live Search Box |
+| `Ctrl + G` | Open Work Performance Graphs & Analytics Dashboard |
 | `Ctrl + Enter` | Save or Update Note in Service Note Dialog |
 | `F5` | Refresh Workstation Grid & Statistics |
 | `Delete` | Delete Currently Selected Item |

@@ -35,7 +35,7 @@ if sys.platform == "win32":
 
 # Import OrbitTracker Model & Dialogs
 from database import DatabaseManager, WorkItem, ServiceNote
-from dialogs import ItemDialog, ServiceNoteDialog, ColumnManagerDialog, DatabaseInitDialog, DeleteDatabaseDialog
+from dialogs import ItemDialog, ServiceNoteDialog, ColumnManagerDialog, DatabaseInitDialog, DeleteDatabaseDialog, WorkAnalyticsDialog
 
 # ==============================================================================
 # 🪐 COSMIC COLOR PALETTE & THEME CONSTANTS
@@ -64,6 +64,7 @@ FONT_CODE = ("Consolas", 9)
 FONT_CODE_BOLD = ("Consolas", 9, "bold")
 FONT_METRIC = ("Segoe UI", 18, "bold")
 FONT_METRIC_LBL = ("Segoe UI", 8, "bold")
+FONT_LABEL = ("Segoe UI", 9, "bold")
 
 
 class OrbitTrackerApp:
@@ -86,6 +87,7 @@ class OrbitTrackerApp:
         self.selected_item_id = None
         self.sort_column = "queue_number"
         self.sort_desc = False
+        self.timeline_filter = "all"  # 'all', 'maintenance', 'quick'
 
         # Determine Database File Path (Opening last opened database from config)
         cfg_db_path = self.config.get("database_path")
@@ -132,7 +134,7 @@ class OrbitTrackerApp:
     def load_config(self):
         default_config = {
             "app_name": "OrbitTracker",
-            "version": "1.0.2-dev",
+            "version": "1.0.3-dev",
             "database_path": "orbit_database.json",
             "preferences": {
                 "autosave_enabled": True,
@@ -364,6 +366,22 @@ class OrbitTrackerApp:
         )
         self.status_pill.pack(side="right", padx=(10, 0))
 
+        btn_analytics = tk.Button(
+            actions_frame,
+            text="📊 Work Graphs",
+            font=FONT_UI_BOLD,
+            fg=BG_MAIN,
+            bg=ACCENT_GOLD,
+            activebackground="#ffe58f",
+            activeforeground=BG_MAIN,
+            relief="flat",
+            padx=12,
+            pady=4,
+            cursor="hand2",
+            command=self.on_show_analytics
+        )
+        btn_analytics.pack(side="right", padx=4)
+
         btn_save = tk.Button(
             actions_frame,
             text="💾 Save DB",
@@ -463,6 +481,7 @@ class OrbitTrackerApp:
         lbl_actions.pack(anchor="w", padx=14, pady=(8, 4))
 
         self.create_sidebar_btn(sidebar, "➕ New Item (Ctrl+N)", self.on_add_item, accent=ACCENT_CYAN, is_bold=True)
+        self.create_sidebar_btn(sidebar, "📊 Work Graphs (Ctrl+G)", self.on_show_analytics, accent=ACCENT_GOLD, is_bold=True)
         self.create_sidebar_btn(sidebar, "⚙️ Manage Columns", self.on_manage_columns)
         self.create_sidebar_btn(sidebar, "💾 Save Database (Ctrl+S)", self.on_save_db)
         self.create_sidebar_btn(sidebar, "📂 Open Database... (Ctrl+O)", self.on_open_db)
@@ -737,10 +756,35 @@ class OrbitTrackerApp:
         self.lbl_log_count.pack(side="left")
 
         btn_add_note = tk.Button(
-            log_top, text="+ Add Note", font=FONT_UI_BOLD, fg=BG_MAIN, bg=ACCENT_GOLD,
-            activebackground="#ffe58f", relief="flat", padx=8, pady=2, cursor="hand2", command=self.on_add_note_dialog
+            log_top, text="+ Add Maintenance Log", font=FONT_UI_BOLD, fg=BG_MAIN, bg=ACCENT_CYAN,
+            activebackground="#79c0ff", relief="flat", padx=10, pady=2, cursor="hand2", command=self.on_add_note_dialog
         )
         btn_add_note.pack(side="right")
+
+        # Filter strip above timeline: All / Maintenance / Quick Notes
+        tf_bar = tk.Frame(sec_log, bg=BG_PANEL)
+        tf_bar.pack(fill="x", pady=(0, 6))
+
+        self.btn_tf_all = tk.Button(
+            tf_bar, text="All", font=("Segoe UI", 8, "bold"), fg=ACCENT_CYAN, bg=BG_ACTIVE,
+            activebackground=BG_ACTIVE, relief="flat", padx=8, pady=1, cursor="hand2",
+            command=lambda: self.set_timeline_filter("all")
+        )
+        self.btn_tf_all.pack(side="left", padx=(0, 3))
+
+        self.btn_tf_maint = tk.Button(
+            tf_bar, text="🛠️ Maintenance", font=("Segoe UI", 8), fg=TEXT_MUTED, bg=BG_SURFACE,
+            activebackground=BG_ACTIVE, relief="flat", padx=8, pady=1, cursor="hand2",
+            command=lambda: self.set_timeline_filter("maintenance")
+        )
+        self.btn_tf_maint.pack(side="left", padx=3)
+
+        self.btn_tf_quick = tk.Button(
+            tf_bar, text="⚡ Quick Notes", font=("Segoe UI", 8), fg=TEXT_MUTED, bg=BG_SURFACE,
+            activebackground=BG_ACTIVE, relief="flat", padx=8, pady=1, cursor="hand2",
+            command=lambda: self.set_timeline_filter("quick")
+        )
+        self.btn_tf_quick.pack(side="left", padx=3)
 
         # Scrollable Canvas for Timeline Notes
         timeline_container = tk.Frame(sec_log, bg=BG_SURFACE, highlightthickness=1, highlightbackground=BORDER_COLOR)
@@ -776,8 +820,8 @@ class OrbitTrackerApp:
         self.entry_quick_note.bind("<Return>", lambda e: self.on_quick_add_note())
 
         btn_quick_add = tk.Button(
-            quick_add, text="Log Note", font=FONT_UI, fg=BG_MAIN, bg=ACCENT_CYAN,
-            activebackground="#79c0ff", relief="flat", padx=10, pady=2, cursor="hand2", command=self.on_quick_add_note
+            quick_add, text="⚡ Quick Log", font=FONT_UI_BOLD, fg=BG_MAIN, bg="#bc8cff",
+            activebackground="#d2a8ff", relief="flat", padx=10, pady=2, cursor="hand2", command=self.on_quick_add_note
         )
         btn_quick_add.pack(side="right")
 
@@ -1030,18 +1074,48 @@ class OrbitTrackerApp:
         # Refresh Timeline Cards
         self.refresh_timeline(item)
 
+    def set_timeline_filter(self, mode):
+        self.timeline_filter = mode
+        self.btn_tf_all.config(
+            bg=BG_ACTIVE if mode == "all" else BG_SURFACE,
+            fg=ACCENT_CYAN if mode == "all" else TEXT_MUTED,
+            font=("Segoe UI", 8, "bold" if mode == "all" else "normal")
+        )
+        self.btn_tf_maint.config(
+            bg=BG_ACTIVE if mode == "maintenance" else BG_SURFACE,
+            fg=ACCENT_MINT if mode == "maintenance" else TEXT_MUTED,
+            font=("Segoe UI", 8, "bold" if mode == "maintenance" else "normal")
+        )
+        self.btn_tf_quick.config(
+            bg=BG_ACTIVE if mode == "quick" else BG_SURFACE,
+            fg="#bc8cff" if mode == "quick" else TEXT_MUTED,
+            font=("Segoe UI", 8, "bold" if mode == "quick" else "normal")
+        )
+        if self.selected_item_id:
+            item = self.db.get_item_by_id(self.selected_item_id)
+            if item:
+                self.refresh_timeline(item)
+
     def refresh_timeline(self, item):
         # Clear existing timeline cards
         for w in self.timeline_cards_frame.winfo_children():
             w.destroy()
 
-        notes = item.service_log
-        self.lbl_log_count.config(text=f"SERVICE LOG ({len(notes)} note{'s' if len(notes) != 1 else ''})")
+        all_notes = item.service_log
+        if self.timeline_filter == "maintenance":
+            notes = [n for n in all_notes if n.note_type != "quick"]
+        elif self.timeline_filter == "quick":
+            notes = [n for n in all_notes if n.note_type == "quick"]
+        else:
+            notes = all_notes
+
+        self.lbl_log_count.config(text=f"SERVICE LOG ({len(notes)}/{len(all_notes)} note{'s' if len(all_notes) != 1 else ''})")
 
         if not notes:
+            msg = "No notes matching the current filter." if all_notes else "No maintenance notes logged yet.\nUse '+ Add Maintenance Log' or quick log below."
             lbl_empty = tk.Label(
                 self.timeline_cards_frame,
-                text="No maintenance notes logged yet.\nUse '+ Add Note' or quick log below.",
+                text=msg,
                 font=FONT_UI,
                 fg=TEXT_MUTED,
                 bg=BG_PANEL,
@@ -1065,12 +1139,19 @@ class OrbitTrackerApp:
         )
         card.pack(fill="x", pady=4, padx=2)
 
-        # Header: Timestamp + Actions
+        # Header: Timestamp + Badge + Actions
         top = tk.Frame(card, bg=BG_SURFACE)
-        top.pack(fill="x", pady=(0, 4))
+        top.pack(fill="x", pady=(0, 6))
 
         lbl_ts = tk.Label(top, text=f"🕒 {note.timestamp}", font=FONT_CODE_BOLD, fg=ACCENT_GOLD, bg=BG_SURFACE)
         lbl_ts.pack(side="left")
+
+        # Type badge
+        if note.note_type == "quick":
+            badge_lbl = tk.Label(top, text="⚡ QUICK NOTE", font=("Segoe UI", 7, "bold"), fg="#bc8cff", bg=BG_PANEL, padx=6, pady=1)
+        else:
+            badge_lbl = tk.Label(top, text="🛠️ MAINTENANCE", font=("Segoe UI", 7, "bold"), fg=ACCENT_CYAN, bg=BG_PANEL, padx=6, pady=1)
+        badge_lbl.pack(side="left", padx=8)
 
         btn_del_note = tk.Button(
             top, text="✕", font=("Segoe UI", 7), fg=TEXT_MUTED, bg=BG_SURFACE,
@@ -1086,21 +1167,67 @@ class OrbitTrackerApp:
         )
         btn_edit_note.pack(side="right", padx=(0, 2))
 
-        # Note Content
-        lbl_note = tk.Label(
-            card,
-            text=note.note,
-            font=FONT_UI,
-            fg=TEXT_PRIMARY,
-            bg=BG_SURFACE,
-            wraplength=360,
-            justify="left"
-        )
-        lbl_note.pack(anchor="w")
+        # Body: Quick Note or Structured Maintenance Record
+        body = tk.Frame(card, bg=BG_SURFACE)
+        body.pack(fill="x", pady=(2, 0))
 
-        # Double-click card or note text to edit natively
+        if note.note_type == "quick":
+            lbl_content = tk.Label(
+                body,
+                text=note.quick_note or note.note,
+                font=FONT_UI,
+                fg=TEXT_PRIMARY,
+                bg=BG_SURFACE,
+                wraplength=360,
+                justify="left"
+            )
+            lbl_content.pack(anchor="w")
+            lbl_content.bind("<Double-Button-1>", lambda e, n=note: self.on_edit_service_note(item.id, n))
+        else:
+            # Problem (Required)
+            r_prob = tk.Frame(body, bg=BG_SURFACE)
+            r_prob.pack(fill="x", pady=(1, 2))
+            tk.Label(r_prob, text="Problem: ", font=FONT_LABEL, fg=ACCENT_GOLD, bg=BG_SURFACE).pack(side="left", anchor="nw")
+            lbl_prob = tk.Label(r_prob, text=note.problem or note.note, font=FONT_UI, fg=TEXT_PRIMARY, bg=BG_SURFACE, wraplength=290, justify="left")
+            lbl_prob.pack(side="left", fill="x", expand=True, anchor="w")
+            lbl_prob.bind("<Double-Button-1>", lambda e, n=note: self.on_edit_service_note(item.id, n))
+
+            # Root Cause (if populated)
+            if note.root_cause:
+                r_root = tk.Frame(body, bg=BG_SURFACE)
+                r_root.pack(fill="x", pady=1)
+                tk.Label(r_root, text="Root Cause: ", font=FONT_LABEL, fg=TEXT_MUTED, bg=BG_SURFACE).pack(side="left", anchor="nw")
+                lbl_root = tk.Label(r_root, text=note.root_cause, font=FONT_UI, fg=TEXT_MUTED, bg=BG_SURFACE, wraplength=280, justify="left")
+                lbl_root.pack(side="left", fill="x", expand=True, anchor="w")
+                lbl_root.bind("<Double-Button-1>", lambda e, n=note: self.on_edit_service_note(item.id, n))
+
+            # Action Taken (if populated)
+            if note.action_taken:
+                r_act = tk.Frame(body, bg=BG_SURFACE)
+                r_act.pack(fill="x", pady=1)
+                tk.Label(r_act, text="Action: ", font=FONT_LABEL, fg=ACCENT_MINT, bg=BG_SURFACE).pack(side="left", anchor="nw")
+                lbl_act = tk.Label(r_act, text=note.action_taken, font=FONT_UI, fg=TEXT_PRIMARY, bg=BG_SURFACE, wraplength=300, justify="left")
+                lbl_act.pack(side="left", fill="x", expand=True, anchor="w")
+                lbl_act.bind("<Double-Button-1>", lambda e, n=note: self.on_edit_service_note(item.id, n))
+
+            # Parts / Materials Consumed (if populated)
+            if note.parts_consumed:
+                r_parts = tk.Frame(body, bg=BG_SURFACE)
+                r_parts.pack(fill="x", pady=(3, 1))
+                tk.Label(r_parts, text="📦 Parts: ", font=FONT_LABEL, fg=ACCENT_GOLD, bg=BG_SURFACE).pack(side="left")
+                lbl_parts = tk.Label(
+                    r_parts,
+                    text=f" {note.parts_consumed} ",
+                    font=("Consolas", 8, "bold"),
+                    fg=ACCENT_GOLD,
+                    bg=BG_PANEL,
+                    relief="flat"
+                )
+                lbl_parts.pack(side="left")
+                lbl_parts.bind("<Double-Button-1>", lambda e, n=note: self.on_edit_service_note(item.id, n))
+
+        # Double-click card to edit natively
         card.bind("<Double-Button-1>", lambda e, n=note: self.on_edit_service_note(item.id, n))
-        lbl_note.bind("<Double-Button-1>", lambda e, n=note: self.on_edit_service_note(item.id, n))
 
     # ==========================================================================
     # ITEM ACTIONS (ADD, EDIT, DELETE, DUPLICATE)
@@ -1118,8 +1245,9 @@ class OrbitTrackerApp:
                 status=r["status"],
                 department=r["department"],
                 custom_fields=r["custom_fields"],
-                initial_note=r["initial_note"],
-                queue_number=r["queue_number"]
+                initial_note=r.get("initial_note"),
+                queue_number=r["queue_number"],
+                initial_note_data=r.get("initial_note_data")
             )
             self.log_message(f"Created work item [{item.queue_number}] {item.item_name}", level="SUCCESS")
             self.selected_item_id = item.id
@@ -1230,8 +1358,20 @@ class OrbitTrackerApp:
         dlg = ServiceNoteDialog(self.root, item)
         self.root.wait_window(dlg)
         if dlg.result:
-            note = self.db.add_service_note(item.id, dlg.result["note"], dlg.result["timestamp"])
-            self.log_message(f"Logged maintenance note for [{item.queue_number}]: {note.note[:30]}...", level="SUCCESS")
+            r = dlg.result
+            note = self.db.add_service_note(
+                item_id=item.id,
+                timestamp=r.get("timestamp"),
+                note_type=r.get("note_type", "maintenance"),
+                problem=r.get("problem", ""),
+                root_cause=r.get("root_cause", ""),
+                action_taken=r.get("action_taken", ""),
+                parts_consumed=r.get("parts_consumed", ""),
+                quick_note=r.get("quick_note", ""),
+                note_text=r.get("note", "")
+            )
+            disp_txt = note.problem or note.quick_note or note.note
+            self.log_message(f"Logged {note.note_type} note for [{item.queue_number}]: {disp_txt[:35]}...", level="SUCCESS")
             self.refresh_table()
             self.update_metrics_cards()
             self.trigger_autosave_if_enabled()
@@ -1244,9 +1384,19 @@ class OrbitTrackerApp:
         dlg = ServiceNoteDialog(self.root, item, note=note)
         self.root.wait_window(dlg)
         if dlg.result:
-            new_text = dlg.result["note"]
-            new_ts = dlg.result["timestamp"]
-            updated = self.db.update_service_note(item.id, note.id, new_text, new_ts)
+            r = dlg.result
+            updated = self.db.update_service_note(
+                item_id=item.id,
+                note_id=note.id,
+                timestamp=r.get("timestamp"),
+                note_type=r.get("note_type"),
+                problem=r.get("problem"),
+                root_cause=r.get("root_cause"),
+                action_taken=r.get("action_taken"),
+                parts_consumed=r.get("parts_consumed"),
+                quick_note=r.get("quick_note"),
+                note_text=r.get("note")
+            )
             if updated:
                 self.log_message(f"Updated service note for [{item.queue_number}]", level="SUCCESS")
                 self.refresh_table()
@@ -1263,7 +1413,12 @@ class OrbitTrackerApp:
         if not item:
             return
 
-        self.db.add_service_note(item.id, text)
+        self.db.add_service_note(
+            item_id=item.id,
+            note_type="quick",
+            quick_note=text,
+            note_text=text
+        )
         self.entry_quick_note.delete(0, "end")
         self.log_message(f"Quick note logged for [{item.queue_number}]", level="SUCCESS")
         self.refresh_table()
@@ -1278,6 +1433,11 @@ class OrbitTrackerApp:
             self.refresh_table()
             self.update_metrics_cards()
             self.trigger_autosave_if_enabled()
+
+    def on_show_analytics(self):
+        """Opens the interactive Work Performance & Maintenance Analytics graph dashboard."""
+        dlg = WorkAnalyticsDialog(self.root, self.db)
+        self.root.wait_window(dlg)
 
     # ==========================================================================
     # CUSTOM COLUMNS MANAGEMENT
@@ -1447,6 +1607,8 @@ class OrbitTrackerApp:
         self.root.bind("<Control-s>", lambda e: self.on_save_db())
         self.root.bind("<Control-o>", lambda e: self.on_open_db())
         self.root.bind("<Control-e>", lambda e: self.on_export_csv())
+        self.root.bind("<Control-g>", lambda e: self.on_show_analytics())
+        self.root.bind("<Control-G>", lambda e: self.on_show_analytics())
         self.root.bind("<Control-f>", lambda e: self.entry_search.focus_set())
         self.root.bind("<F5>", lambda e: self.refresh_table())
         self.root.bind("<Delete>", lambda e: self.on_delete_item())

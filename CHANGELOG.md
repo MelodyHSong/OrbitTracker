@@ -7,6 +7,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## ⭐ [1.0.3-dev] - 2026-09-14
+
+### Added
+- **Structured Maintenance Log System**: Replaced monolithic freeform service note strings with structured engineering fields:
+  - `Problem *` (Required): Primary failure description, inspection need, or defect summary.
+  - `Root Cause` (Optional): Mechanical, thermal, electrical, or operational failure cause.
+  - `Action Taken` (Optional): Corrective maintenance action, adjustment, or replacement procedure performed.
+  - `Parts/Materials Consumed` (Optional): Materials, spare parts, serial numbers, gaskets, fluids, or filters consumed.
+- **Dedicated Quick Notes**: Lightweight operational notes and shift handoffs separate from diagnostic maintenance records, identified by a distinct purple pill badge (`⚡ Quick Note`).
+- **Dual-Channel Timeline Filtering**: Real-time filter toolbar embedded directly above the service history cards (`All` | `🛠️ Maintenance` | `⚡ Quick Notes`).
+- **Interactive Work Analytics & Graphing Dashboard (`WorkAnalyticsDialog`)**:
+  - Full-featured visual dashboard accessible via top header button, sidebar action buttons, and keyboard shortcut <kbd>Ctrl</kbd>+<kbd>G</kbd>.
+  - High-resolution native Tkinter vector canvas charting with custom dark cosmic aesthetics, dynamic value axis scaling, and grid guidelines.
+  - **5 Analytical View Tabs**:
+    1. *Activity Over Time*: Chronological monthly service logging volume and velocity.
+    2. *Work by Department*: Comparative bar distribution of service operations across departments.
+    3. *Equipment Service Intensity*: Work items ranked by cumulative maintenance interventions.
+    4. *Root Cause Breakdown*: Pareto breakdown of recurring engineering failure modes.
+    5. *Parts Consumed Log*: Inventory parts utilization frequency and consumption log.
+  - Interactive mouse-hover tooltips displaying exact metric counts, department percentages, and part frequencies.
+  - Tabular lower data inspection views for immediate numerical review.
+  - Dynamic KPI metric cards (Total Items, Total Notes, Maintenance Logs, Quick Notes, Total Parts Consumed).
+- **Expanded Multi-Field Search**: Real-time search engine now scans across all structured fields (`problem`, `root_cause`, `action_taken`, `parts_consumed`, `quick_note`).
+- **Enhanced CSV Export**: Exports dedicated columns for `Problem`, `Root Cause`, `Action Taken`, `Parts Consumed`, and `Note Type` alongside synthesized summaries.
+- **100% Non-Destructive Database Schema**:
+  - Synthesized backward-compatible `note` property ensuring existing unit tests, third-party consumers, and legacy records remain 100% operational without data migration.
+  - Transparent deserialization of legacy string-based service logs and graceful fallback rendering.
+- **Automated UI & Visual Component Tests**: Added `tests/test_ui_components.py` testing timeline filtering, card rendering, and canvas chart drawing.
+
+---
+
 ## ⭐ [1.0.2-dev] - 2026-09-08
 
 ### Added

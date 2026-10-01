@@ -32,6 +32,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Eliminated horizontal tab-bar overflow by resizing window default to 1080x740 with responsive layout.
 - **Service Note Dialog Rendering**:
   - Fixed an `AttributeError` on `self.db` in `ServiceNoteDialog` that prevented the lower half of the maintenance form from rendering.
+- **Preset Deletion UI Font Reference**:
+  - Fixed an undefined `FONT_UI_BOLD` constant reference on the task preset deletion button in `ServiceNoteDialog`.
 
 ---
 

@@ -34,6 +34,7 @@ COLOR_IDLE = "#f2cc60"
 FONT_TITLE = ("Segoe UI", 12, "bold")
 FONT_LABEL = ("Segoe UI", 9, "bold")
 FONT_UI = ("Segoe UI", 9)
+FONT_UI_BOLD = ("Segoe UI", 9, "bold")
 FONT_CODE = ("Consolas", 9)
 FONT_CODE_BOLD = ("Consolas", 9, "bold")
 

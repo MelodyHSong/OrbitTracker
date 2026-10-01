@@ -1,7 +1,7 @@
 {
   "app_name": "OrbitTracker",
-  "version": "1.0.3-dev",
-  "last_modified": "2026-09-07 20:29:17",
+  "version": "1.1.0-dev",
+  "last_modified": "2026-09-30 22:08:38",
   "queue_prefix": "Q-",
   "next_queue_id": 4,
   "custom_columns": [
@@ -21,6 +21,8 @@
       "make_and_model": "Flowserve HPX-600",
       "status": "Active",
       "department": "Cryogenics & Propulsion",
+      "category": "Cryogenics & Propulsion",
+      "device_type": "Booster Pump",
       "custom_fields": {
         "col_bc82e2bd": "Bay 4 West"
       },
@@ -28,11 +30,31 @@
         {
           "id": "2acb52ca",
           "timestamp": "2026-09-07 20:29:17",
+          "note_type": "maintenance",
+          "work_status": "Done",
+          "severity": "Routine",
+          "service_type": "Corrective Repair",
+          "technician": "M. Song",
+          "problem": "Replaced high-pressure mechanical seal and verified casing alignment.",
+          "root_cause": "Normal operating thermal cycles",
+          "action_taken": "Aligned casing and installed fluorosilicone seal pack",
+          "parts_consumed": "Gasket Pack #GRP-99",
+          "quick_note": "",
           "note": "Replaced high-pressure mechanical seal and verified casing alignment."
         },
         {
           "id": "1c06601c",
           "timestamp": "2026-09-07 20:29:17",
+          "note_type": "maintenance",
+          "work_status": "Done",
+          "severity": "Routine",
+          "service_type": "Preventative Maintenance (PM)",
+          "technician": "M. Song",
+          "problem": "Lubricated bearings with synthetic Krytox grease; vibrations nominal.",
+          "root_cause": "",
+          "action_taken": "Packed bearing assembly with Krytox GPL-205",
+          "parts_consumed": "Krytox GPL-205 (50g)",
+          "quick_note": "",
           "note": "Lubricated bearings with synthetic Krytox grease; vibrations nominal."
         }
       ],
@@ -48,6 +70,8 @@
       "make_and_model": "L3Harris SpaceLink-9",
       "status": "Active",
       "department": "Avionics & Communications",
+      "category": "Electrical & Avionics",
+      "device_type": "Transceiver",
       "custom_fields": {
         "col_bc82e2bd": "Avionics Cleanroom"
       },
@@ -55,6 +79,16 @@
         {
           "id": "56fbeffe",
           "timestamp": "2026-09-07 20:29:17",
+          "note_type": "maintenance",
+          "work_status": "Working",
+          "severity": "Medium",
+          "service_type": "Inspection & Testing",
+          "technician": "A. Vance",
+          "problem": "Bench-tested Ku-band frequency synthesizer; power output 42 dBm.",
+          "root_cause": "",
+          "action_taken": "Calibrated frequency offset against lab reference",
+          "parts_consumed": "",
+          "quick_note": "",
           "note": "Bench-tested Ku-band frequency synthesizer; power output 42 dBm."
         }
       ],
@@ -70,6 +104,8 @@
       "make_and_model": "Parker Hannifin E-Series",
       "status": "Inactive",
       "department": "Hydraulics & Actuation",
+      "category": "Hydraulics & Pneumatics",
+      "device_type": "Actuator",
       "custom_fields": {
         "col_bc82e2bd": "Storage Depot B"
       },
@@ -77,6 +113,16 @@
         {
           "id": "df9a6fa3",
           "timestamp": "2026-09-07 20:29:17",
+          "note_type": "maintenance",
+          "work_status": "Stuck",
+          "severity": "Critical",
+          "service_type": "Corrective Repair",
+          "technician": "K. Chen",
+          "problem": "Awaiting replacement spool assembly from vendor.",
+          "root_cause": "Pilot channel contamination",
+          "action_taken": "Flushed pilot orifice and submitted expedited purchase order",
+          "parts_consumed": "Spool Core #PH-501-A",
+          "quick_note": "",
           "note": "Awaiting replacement spool assembly from vendor."
         }
       ],

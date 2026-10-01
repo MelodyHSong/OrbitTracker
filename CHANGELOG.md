@@ -7,34 +7,70 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## ⭐ [1.0.3-dev] - 2026-09-14
+## ⭐ [1.1.0-dev] - 2026-09-30
 
 ### Added
-- **Structured Maintenance Log System**: Replaced monolithic freeform service note strings with structured engineering fields:
-  - `Problem *` (Required): Primary failure description, inspection need, or defect summary.
-  - `Root Cause` (Optional): Mechanical, thermal, electrical, or operational failure cause.
-  - `Action Taken` (Optional): Corrective maintenance action, adjustment, or replacement procedure performed.
-  - `Parts/Materials Consumed` (Optional): Materials, spare parts, serial numbers, gaskets, fluids, or filters consumed.
-- **Dedicated Quick Notes**: Lightweight operational notes and shift handoffs separate from diagnostic maintenance records, identified by a distinct purple pill badge (`⚡ Quick Note`).
-- **Dual-Channel Timeline Filtering**: Real-time filter toolbar embedded directly above the service history cards (`All` | `🛠️ Maintenance` | `⚡ Quick Notes`).
-- **Interactive Work Analytics & Graphing Dashboard (`WorkAnalyticsDialog`)**:
-  - Full-featured visual dashboard accessible via top header button, sidebar action buttons, and keyboard shortcut <kbd>Ctrl</kbd>+<kbd>G</kbd>.
-  - High-resolution native Tkinter vector canvas charting with custom dark cosmic aesthetics, dynamic value axis scaling, and grid guidelines.
-  - **5 Analytical View Tabs**:
-    1. *Activity Over Time*: Chronological monthly service logging volume and velocity.
-    2. *Work by Department*: Comparative bar distribution of service operations across departments.
-    3. *Equipment Service Intensity*: Work items ranked by cumulative maintenance interventions.
-    4. *Root Cause Breakdown*: Pareto breakdown of recurring engineering failure modes.
-    5. *Parts Consumed Log*: Inventory parts utilization frequency and consumption log.
-  - Interactive mouse-hover tooltips displaying exact metric counts, department percentages, and part frequencies.
-  - Tabular lower data inspection views for immediate numerical review.
-  - Dynamic KPI metric cards (Total Items, Total Notes, Maintenance Logs, Quick Notes, Total Parts Consumed).
-- **Expanded Multi-Field Search**: Real-time search engine now scans across all structured fields (`problem`, `root_cause`, `action_taken`, `parts_consumed`, `quick_note`).
-- **Enhanced CSV Export**: Exports dedicated columns for `Problem`, `Root Cause`, `Action Taken`, `Parts Consumed`, and `Note Type` alongside synthesized summaries.
-- **100% Non-Destructive Database Schema**:
-  - Synthesized backward-compatible `note` property ensuring existing unit tests, third-party consumers, and legacy records remain 100% operational without data migration.
-  - Transparent deserialization of legacy string-based service logs and graceful fallback rendering.
-- **Automated UI & Visual Component Tests**: Added `tests/test_ui_components.py` testing timeline filtering, card rendering, and canvas chart drawing.
+- **Movable & Resizable UI Data Grid Columns**:
+  - Implemented drag-and-drop column reordering on Treeview headers with automatic persistence of `column_order` in `config.json`.
+  - Configured resizable columns (`stretch=False`) that preserve custom widths across table refreshes and persist in `config.json`.
+- **Orange Observation Classification for Quick Notes**:
+  - Converted quick notes to dedicated observation logs tagged with a vibrant orange `🔭 OBSERVATION` pill badge (`#f0883e`).
+  - Removed Done/Idle/Working status overrides from notes, ensuring quick observations never overwrite the operational Kanban state of equipment.
+- **Empty Baseline Presets for Categories, Device Types & Tasks**:
+  - Initialized databases with empty preset categories, device types, technicians, and tasks so users start with a clean slate and build their own operational library.
+  - Added user-customizable task preset saving (`💾 Save Current Form as Preset...`) and preset deletion in `ServiceNoteDialog`.
+- **Dynamic Technician Autocomplete Dropdowns**:
+  - Automatically registers newly typed technicians and populates dropdowns across `ItemDialog` and `ServiceNoteDialog` for future use.
+- **Interactive Note Type Mode Switcher**:
+  - Added an in-dialog toggle (`🛠️ Maintenance Record` vs `🔭 Observation Note`) in `ServiceNoteDialog` for seamless switching between structured maintenance forms and quick notes.
+- **Cosmic Motto**:
+  - Added witty branding quote under the Orbit Tracker header logo: *"Always document your journey, traveller!"*.
+
+### Fixed
+- **Analytics Dialog Glitches**:
+  - Corrected canvas legend overlap in `WorkAnalyticsDialog` by dynamically computing character widths and spacing.
+  - Eliminated horizontal tab-bar overflow by resizing window default to 1080x740 with responsive layout.
+- **Service Note Dialog Rendering**:
+  - Fixed an `AttributeError` on `self.db` in `ServiceNoteDialog` that prevented the lower half of the maintenance form from rendering.
+
+---
+
+## ⭐ [1.0.3-dev] - 2026-09-30
+
+### Added
+- **Category & Device Type First-Class Workflows**:
+  - Integrated `device_type` and `category` as core equipment attributes across the schema, Item creation dialog (`ItemDialog`), central data grid, sorting engine, and details inspector.
+  - Pre-populated Category dropdown with standard aerospace and industrial engineering domains plus auto-discovery of existing categories.
+  - Multi-field sidebar filters for **Device Type**, **Category**, and **Work State**.
+- **Non-Breaking Database Schema Auto-Migration**:
+  - Automated detection and non-destructive migration of legacy custom columns matching "Device Type" or "Category" (`DatabaseManager.migrate_schema()`).
+  - Historical custom field values safely copied to core attributes without data loss.
+  - Safe retirement of legacy custom column definitions to prevent duplicate columns in the workstation grid.
+  - Automatic pre-migration backup creation (`.pre_migration_backup`).
+- **Operational Work States (Done, Working, Stuck, Idle)**:
+  - Added dedicated operational state tracking at the service note and equipment level.
+  - Prominent color-coded work state pill badges in the details inspector (`DONE`, `WORKING`, `STUCK`, `IDLE`).
+  - Grid row styling accents for items in `Stuck` (coral) and `Working` (cyan) states.
+  - Sidebar KPI status matrix with live counters for **Total**, **Working**, **Stuck**, **Done**, **Idle**, and **Notes**.
+- **Overhauled Maintenance Diagnostics & Task Presets**:
+  - Structured maintenance logs with dedicated engineering fields: `Problem *`, `Root Cause`, `Action Taken`, and `Parts/Materials Consumed`.
+  - **⚡ Task Presets Menu**: One-click quick-fill templates in `ServiceNoteDialog` for routine maintenance (PM Pressure Seal, Bearing Lubrication Flush, Sensor Recalibration, RF Link Check, Actuator Solenoid Jammed, Intake Functional Pass).
+  - Severity classification (`Routine`, `Medium`, `High`, `Critical`), Service Type categorizing, and Technician attribution.
+  - Faceted timeline filtering supporting `All`, `🛠️ Maintenance`, `⚡ Quick Notes`, `🔄 Working`, `⚠️ Stuck`, and `✅ Done`.
+- **Multi-Period Work Analytics Engine (`WorkAnalyticsDialog`)**:
+  - Added interactive period switcher supporting **Daily**, **Weekly**, **Monthly**, **Quarterly**, and **Yearly** analysis intervals.
+  - **7 Analytical View Tabs**:
+    1. *Temporal Trends*: Dynamic volume trends and velocity curves across the chosen timeframe.
+    2. *Device Types & Categories*: Distribution across hardware archetypes and engineering categories.
+    3. *Problems & Diagnostics*: Frequency analysis of recurring failure modes and diagnostics.
+    4. *Parts Consumed Log*: Parts utilization registry with consumable counts.
+    5. *Work by Department*: Comparative workload distributions across engineering units.
+    6. *Equipment Service Intensity*: High-maintenance equipment Pareto ranking.
+    7. *Root Cause Breakdown*: Fault mode distribution and wear patterns.
+  - Global filter controls by Device Type, Category, and Work State.
+  - Interactive mouse-hover tooltips and lower data inspection tables.
+- **Enhanced CSV Export**: Outputs dedicated columns for `Device Type`, `Category`, `Current State`, `Problem`, `Root Cause`, `Action Taken`, `Parts Consumed`, and `Note Type`.
+- **Comprehensive Test Coverage**: Extended `tests/test_database.py` and `tests/test_ui_components.py` testing migration, work states, multi-period analytics intervals, and sidebar filtering.
 
 ---
 

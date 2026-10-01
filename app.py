@@ -3,6 +3,7 @@
 # Language: Python
 # File Name: app.py
 # Description: Desktop Workstation with JSON database, auto-generated Queue Numbers,
+#              Device Type and Category workflows, Work State tracking (Done, Working, Stuck, Idle),
 #              pre-defined and dynamic custom columns, and service maintenance logs.
 
 import sys
@@ -56,13 +57,18 @@ ACCENT_GOLD = "#f2cc60"      # Celestial star gold
 ACCENT_MINT = "#7ee787"      # Status ok / active green
 ACCENT_CORAL = "#f85149"     # Alert / inactive red
 
+COLOR_WORKING = "#58a6ff"    # In-progress blue
+COLOR_STUCK = "#f85149"      # Blocked / stuck coral
+COLOR_DONE = "#7ee787"       # Completed mint
+COLOR_IDLE = "#f2cc60"       # Standby gold
+
 FONT_HEADER = ("Segoe UI", 13, "bold")
 FONT_SUBHEADER = ("Segoe UI", 9)
 FONT_UI = ("Segoe UI", 9)
 FONT_UI_BOLD = ("Segoe UI", 9, "bold")
 FONT_CODE = ("Consolas", 9)
 FONT_CODE_BOLD = ("Consolas", 9, "bold")
-FONT_METRIC = ("Segoe UI", 18, "bold")
+FONT_METRIC = ("Segoe UI", 16, "bold")
 FONT_METRIC_LBL = ("Segoe UI", 8, "bold")
 FONT_LABEL = ("Segoe UI", 9, "bold")
 
@@ -71,8 +77,8 @@ class OrbitTrackerApp:
     def __init__(self, root, initial_file=None):
         self.root = root
         self.root.title("🪐 OrbitTracker — Work Activity & Maintenance Workstation")
-        self.root.geometry("1240x760")
-        self.root.minsize(960, 600)
+        self.root.geometry("1280x780")
+        self.root.minsize(980, 620)
         self.root.configure(bg=BG_MAIN)
 
         # Asset & Path Resolution
@@ -87,9 +93,18 @@ class OrbitTrackerApp:
         self.selected_item_id = None
         self.sort_column = "queue_number"
         self.sort_desc = False
-        self.timeline_filter = "all"  # 'all', 'maintenance', 'quick'
+        self.timeline_filter = "all"
 
-        # Determine Database File Path (Opening last opened database from config)
+        # Movable and Resizable Column Preferences
+        prefs = self.config.get("preferences", {})
+        self.column_widths = dict(prefs.get("column_widths", {}))
+        self.column_order = list(prefs.get("column_order", [])) if prefs.get("column_order") else None
+        self._drag_col_idx = None
+        self._drag_start_x = 0
+        self._drag_active = False
+        self._suppress_sort = False
+
+        # Determine Database File Path
         cfg_db_path = self.config.get("database_path")
         if initial_file:
             db_path = os.path.abspath(initial_file)
@@ -134,7 +149,7 @@ class OrbitTrackerApp:
     def load_config(self):
         default_config = {
             "app_name": "OrbitTracker",
-            "version": "1.0.3-dev",
+            "version": "1.1.0-dev",
             "database_path": "orbit_database.json",
             "preferences": {
                 "autosave_enabled": True,
@@ -161,6 +176,13 @@ class OrbitTrackerApp:
             except ValueError:
                 self.config["database_path"] = self.db.db_path
 
+            if "preferences" not in self.config:
+                self.config["preferences"] = {}
+            if hasattr(self, "column_widths") and self.column_widths:
+                self.config["preferences"]["column_widths"] = self.column_widths
+            if hasattr(self, "column_order") and self.column_order:
+                self.config["preferences"]["column_order"] = self.column_order
+
             with open(self.config_path, "w", encoding="utf-8") as f:
                 json.dump(self.config, f, indent=2)
         except Exception as e:
@@ -180,7 +202,6 @@ class OrbitTrackerApp:
                     pass
 
     def prompt_database_init(self):
-        """Asks user whether to create an empty database or load the demo when default DB is missing."""
         dlg = DatabaseInitDialog(self.root, db_path=self.db.db_path)
         self.root.wait_window(dlg)
 
@@ -200,7 +221,7 @@ class OrbitTrackerApp:
             self.log_message(f"Created fresh empty database: {os.path.basename(self.db.db_path)}", level="SUCCESS")
 
     def seed_starter_data(self):
-        """Creates sample items when initializing OrbitTracker demo data."""
+        """Creates sample items with device types and categories when initializing demo data."""
         if len(self.db.items) > 0:
             return
         item1 = self.db.add_item(
@@ -208,20 +229,40 @@ class OrbitTrackerApp:
             st_number="ST-94812",
             item_name="Centrifugal Booster Pump",
             make_and_model="Flowserve HPX-600",
+            device_type="Booster Pump",
+            category="Cryogenics & Propulsion",
             status="Active",
             department="Cryogenics & Propulsion",
-            initial_note="Replaced high-pressure mechanical seal and verified casing alignment."
+            initial_note_data={
+                "problem": "Replaced high-pressure mechanical seal and verified casing alignment.",
+                "root_cause": "Normal operating thermal cycles",
+                "action_taken": "Aligned casing and installed fluorosilicone seal pack",
+                "parts_consumed": "Gasket Pack #GRP-99",
+                "service_type": "Preventative Maintenance (PM)",
+                "work_status": "Done",
+                "severity": "Routine",
+                "technician": "M. Song"
+            }
         )
-        self.db.add_service_note(item1.id, "Lubricated bearings with synthetic Krytox grease; vibrations nominal.")
+        self.db.add_service_note(item1.id, "Lubricated bearings with synthetic Krytox grease; vibrations nominal.", work_status="Done")
 
         item2 = self.db.add_item(
             moc_number="MOC-3048",
             st_number="ST-88104",
             item_name="Telemetry Transceiver Unit",
             make_and_model="L3Harris SpaceLink-9",
+            device_type="Transceiver",
+            category="Electrical & Avionics",
             status="Active",
             department="Avionics & Communications",
-            initial_note="Bench-tested Ku-band frequency synthesizer; power output 42 dBm."
+            initial_note_data={
+                "problem": "Bench-tested Ku-band frequency synthesizer; power output 42 dBm.",
+                "action_taken": "Calibrated frequency offset against lab reference",
+                "service_type": "Inspection & Testing",
+                "work_status": "Working",
+                "severity": "Medium",
+                "technician": "A. Vance"
+            }
         )
 
         item3 = self.db.add_item(
@@ -229,12 +270,20 @@ class OrbitTrackerApp:
             st_number="ST-77319",
             item_name="Hydraulic Actuator Solenoid",
             make_and_model="Parker Hannifin E-Series",
+            device_type="Actuator",
+            category="Hydraulics & Pneumatics",
             status="Inactive",
             department="Hydraulics & Actuation",
-            initial_note="Awaiting replacement spool assembly from vendor."
+            initial_note_data={
+                "problem": "Awaiting replacement spool assembly from vendor.",
+                "root_cause": "Pilot channel contamination",
+                "service_type": "Corrective Repair",
+                "work_status": "Stuck",
+                "severity": "Critical",
+                "technician": "K. Chen"
+            }
         )
 
-        # Add a starter custom column
         self.db.add_custom_column("Facility Bay", default_val="Main Hangar")
         self.db.update_item(item1.id, custom_fields={self.db.custom_columns[0]["id"]: "Bay 4 West"})
         self.db.update_item(item2.id, custom_fields={self.db.custom_columns[0]["id"]: "Avionics Cleanroom"})
@@ -251,7 +300,7 @@ class OrbitTrackerApp:
         # 1. Header Bar
         self.build_header()
 
-        # 2. Main Workspace Layout: Left Sidebar + Central Workstation + Right Inspector
+        # 2. Main Workspace Layout
         main_container = tk.Frame(self.root, bg=BG_MAIN)
         main_container.pack(fill="both", expand=True, padx=12, pady=(0, 4))
 
@@ -268,7 +317,6 @@ class OrbitTrackerApp:
         style = ttk.Style()
         style.theme_use("clam")
 
-        # Scrollbars
         style.configure(
             "Vertical.TScrollbar",
             background=BG_PANEL,
@@ -278,7 +326,6 @@ class OrbitTrackerApp:
         )
         style.map("Vertical.TScrollbar", background=[("active", ACCENT_CYAN)])
 
-        # Treeview (Data Grid)
         style.configure(
             "Treeview",
             background=BG_PANEL,
@@ -307,7 +354,6 @@ class OrbitTrackerApp:
             foreground=[("selected", ACCENT_CYAN)]
         )
 
-        # Combobox
         style.configure(
             "TCombobox",
             background=BG_SURFACE,
@@ -324,33 +370,25 @@ class OrbitTrackerApp:
     # HEADER BAR
     # --------------------------------------------------------------------------
     def build_header(self):
-        header = tk.Frame(self.root, bg=BG_PANEL, height=60, highlightthickness=1, highlightbackground=BORDER_COLOR)
+        header = tk.Frame(self.root, bg=BG_PANEL, height=68, highlightthickness=1, highlightbackground=BORDER_COLOR)
         header.pack(fill="x", padx=12, pady=(8, 8))
         header.pack_propagate(False)
 
-        # Left Branding
         brand_frame = tk.Frame(header, bg=BG_PANEL)
-        brand_frame.pack(side="left", padx=14, pady=6)
+        brand_frame.pack(side="left", padx=14, pady=4)
 
-        title_lbl = tk.Label(
-            brand_frame,
-            text="🪐 ORBIT TRACKER",
-            font=FONT_HEADER,
-            fg=TEXT_PRIMARY,
-            bg=BG_PANEL
-        )
+        title_lbl = tk.Label(brand_frame, text="🪐 ORBIT TRACKER", font=FONT_HEADER, fg=TEXT_PRIMARY, bg=BG_PANEL)
         title_lbl.pack(anchor="w")
 
-        subtitle_lbl = tk.Label(
+        quote_lbl = tk.Label(
             brand_frame,
-            text="Work Activity & Maintenance Workstation • JSON Persistence",
-            font=FONT_SUBHEADER,
-            fg=TEXT_MUTED,
+            text='✨ "Always document your journey, traveller!"',
+            font=("Segoe UI", 9, "italic"),
+            fg=ACCENT_CYAN,
             bg=BG_PANEL
         )
-        subtitle_lbl.pack(anchor="w")
+        quote_lbl.pack(anchor="w", pady=(1, 0))
 
-        # Right Actions & Status Pill
         actions_frame = tk.Frame(header, bg=BG_PANEL)
         actions_frame.pack(side="right", padx=14, pady=8)
 
@@ -368,7 +406,7 @@ class OrbitTrackerApp:
 
         btn_analytics = tk.Button(
             actions_frame,
-            text="📊 Work Graphs",
+            text="📊 Work Analytics",
             font=FONT_UI_BOLD,
             fg=BG_MAIN,
             bg=ACCENT_GOLD,
@@ -434,43 +472,57 @@ class OrbitTrackerApp:
     # SIDEBAR
     # --------------------------------------------------------------------------
     def build_sidebar(self, parent):
-        sidebar = tk.Frame(parent, bg=BG_PANEL, width=250, highlightthickness=1, highlightbackground=BORDER_COLOR)
+        sidebar = tk.Frame(parent, bg=BG_PANEL, width=255, highlightthickness=1, highlightbackground=BORDER_COLOR)
         sidebar.pack(side="left", fill="y", padx=(0, 8))
         sidebar.pack_propagate(False)
 
-        # Top KPI Metrics Cards
-        lbl_kpi = tk.Label(sidebar, text="DATABASE METRICS", font=FONT_METRIC_LBL, fg=ACCENT_GOLD, bg=BG_PANEL)
-        lbl_kpi.pack(anchor="w", padx=14, pady=(12, 6))
+        # Top KPI Metrics Cards (6-card responsive matrix)
+        lbl_kpi = tk.Label(sidebar, text="FLEET STATUS METRICS", font=FONT_METRIC_LBL, fg=ACCENT_GOLD, bg=BG_PANEL)
+        lbl_kpi.pack(anchor="w", padx=14, pady=(10, 4))
 
         metrics_grid = tk.Frame(sidebar, bg=BG_PANEL)
-        metrics_grid.pack(fill="x", padx=12, pady=(0, 10))
+        metrics_grid.pack(fill="x", padx=12, pady=(0, 8))
 
-        # Card 1: Total Items
-        c1 = tk.Frame(metrics_grid, bg=BG_SURFACE, highlightthickness=1, highlightbackground=BORDER_COLOR, padx=8, pady=6)
+        # Card 1: Total
+        c1 = tk.Frame(metrics_grid, bg=BG_SURFACE, highlightthickness=1, highlightbackground=BORDER_COLOR, padx=6, pady=4)
         c1.grid(row=0, column=0, sticky="nsew", padx=2, pady=2)
         tk.Label(c1, text="TOTAL", font=FONT_METRIC_LBL, fg=TEXT_MUTED, bg=BG_SURFACE).pack(anchor="w")
         self.lbl_metric_total = tk.Label(c1, text="0", font=FONT_METRIC, fg=ACCENT_CYAN, bg=BG_SURFACE)
         self.lbl_metric_total.pack(anchor="w")
 
-        # Card 2: Active
-        c2 = tk.Frame(metrics_grid, bg=BG_SURFACE, highlightthickness=1, highlightbackground=BORDER_COLOR, padx=8, pady=6)
+        # Card 2: Working
+        c2 = tk.Frame(metrics_grid, bg=BG_SURFACE, highlightthickness=1, highlightbackground=BORDER_COLOR, padx=6, pady=4)
         c2.grid(row=0, column=1, sticky="nsew", padx=2, pady=2)
-        tk.Label(c2, text="ACTIVE", font=FONT_METRIC_LBL, fg=TEXT_MUTED, bg=BG_SURFACE).pack(anchor="w")
-        self.lbl_metric_active = tk.Label(c2, text="0", font=FONT_METRIC, fg=ACCENT_MINT, bg=BG_SURFACE)
-        self.lbl_metric_active.pack(anchor="w")
+        tk.Label(c2, text="WORKING", font=FONT_METRIC_LBL, fg=TEXT_MUTED, bg=BG_SURFACE).pack(anchor="w")
+        self.lbl_metric_working = tk.Label(c2, text="0", font=FONT_METRIC, fg=COLOR_WORKING, bg=BG_SURFACE)
+        self.lbl_metric_working.pack(anchor="w")
 
-        # Card 3: Inactive
-        c3 = tk.Frame(metrics_grid, bg=BG_SURFACE, highlightthickness=1, highlightbackground=BORDER_COLOR, padx=8, pady=6)
+        # Card 3: Stuck
+        c3 = tk.Frame(metrics_grid, bg=BG_SURFACE, highlightthickness=1, highlightbackground=BORDER_COLOR, padx=6, pady=4)
         c3.grid(row=1, column=0, sticky="nsew", padx=2, pady=2)
-        tk.Label(c3, text="INACTIVE", font=FONT_METRIC_LBL, fg=TEXT_MUTED, bg=BG_SURFACE).pack(anchor="w")
-        self.lbl_metric_inactive = tk.Label(c3, text="0", font=FONT_METRIC, fg=ACCENT_CORAL, bg=BG_SURFACE)
-        self.lbl_metric_inactive.pack(anchor="w")
+        tk.Label(c3, text="STUCK", font=FONT_METRIC_LBL, fg=TEXT_MUTED, bg=BG_SURFACE).pack(anchor="w")
+        self.lbl_metric_stuck = tk.Label(c3, text="0", font=FONT_METRIC, fg=COLOR_STUCK, bg=BG_SURFACE)
+        self.lbl_metric_stuck.pack(anchor="w")
 
-        # Card 4: Service Notes
-        c4 = tk.Frame(metrics_grid, bg=BG_SURFACE, highlightthickness=1, highlightbackground=BORDER_COLOR, padx=8, pady=6)
+        # Card 4: Done
+        c4 = tk.Frame(metrics_grid, bg=BG_SURFACE, highlightthickness=1, highlightbackground=BORDER_COLOR, padx=6, pady=4)
         c4.grid(row=1, column=1, sticky="nsew", padx=2, pady=2)
-        tk.Label(c4, text="NOTES", font=FONT_METRIC_LBL, fg=TEXT_MUTED, bg=BG_SURFACE).pack(anchor="w")
-        self.lbl_metric_notes = tk.Label(c4, text="0", font=FONT_METRIC, fg=ACCENT_GOLD, bg=BG_SURFACE)
+        tk.Label(c4, text="DONE", font=FONT_METRIC_LBL, fg=TEXT_MUTED, bg=BG_SURFACE).pack(anchor="w")
+        self.lbl_metric_done = tk.Label(c4, text="0", font=FONT_METRIC, fg=COLOR_DONE, bg=BG_SURFACE)
+        self.lbl_metric_done.pack(anchor="w")
+
+        # Card 5: Idle
+        c5 = tk.Frame(metrics_grid, bg=BG_SURFACE, highlightthickness=1, highlightbackground=BORDER_COLOR, padx=6, pady=4)
+        c5.grid(row=2, column=0, sticky="nsew", padx=2, pady=2)
+        tk.Label(c5, text="IDLE", font=FONT_METRIC_LBL, fg=TEXT_MUTED, bg=BG_SURFACE).pack(anchor="w")
+        self.lbl_metric_idle = tk.Label(c5, text="0", font=FONT_METRIC, fg=COLOR_IDLE, bg=BG_SURFACE)
+        self.lbl_metric_idle.pack(anchor="w")
+
+        # Card 6: Notes
+        c6 = tk.Frame(metrics_grid, bg=BG_SURFACE, highlightthickness=1, highlightbackground=BORDER_COLOR, padx=6, pady=4)
+        c6.grid(row=2, column=1, sticky="nsew", padx=2, pady=2)
+        tk.Label(c6, text="NOTES", font=FONT_METRIC_LBL, fg=TEXT_MUTED, bg=BG_SURFACE).pack(anchor="w")
+        self.lbl_metric_notes = tk.Label(c6, text="0", font=FONT_METRIC, fg="#bc8cff", bg=BG_SURFACE)
         self.lbl_metric_notes.pack(anchor="w")
 
         metrics_grid.columnconfigure(0, weight=1)
@@ -478,10 +530,10 @@ class OrbitTrackerApp:
 
         # Primary Action Buttons
         lbl_actions = tk.Label(sidebar, text="ACTIONS & DATABASE", font=FONT_METRIC_LBL, fg=ACCENT_GOLD, bg=BG_PANEL)
-        lbl_actions.pack(anchor="w", padx=14, pady=(8, 4))
+        lbl_actions.pack(anchor="w", padx=14, pady=(6, 2))
 
         self.create_sidebar_btn(sidebar, "➕ New Item (Ctrl+N)", self.on_add_item, accent=ACCENT_CYAN, is_bold=True)
-        self.create_sidebar_btn(sidebar, "📊 Work Graphs (Ctrl+G)", self.on_show_analytics, accent=ACCENT_GOLD, is_bold=True)
+        self.create_sidebar_btn(sidebar, "📊 Work Analytics (Ctrl+G)", self.on_show_analytics, accent=ACCENT_GOLD, is_bold=True)
         self.create_sidebar_btn(sidebar, "⚙️ Manage Columns", self.on_manage_columns)
         self.create_sidebar_btn(sidebar, "💾 Save Database (Ctrl+S)", self.on_save_db)
         self.create_sidebar_btn(sidebar, "📂 Open Database... (Ctrl+O)", self.on_open_db)
@@ -491,7 +543,7 @@ class OrbitTrackerApp:
 
         # Filters & Search Card
         lbl_filters = tk.Label(sidebar, text="FILTERS & SEARCH", font=FONT_METRIC_LBL, fg=ACCENT_GOLD, bg=BG_PANEL)
-        lbl_filters.pack(anchor="w", padx=14, pady=(12, 4))
+        lbl_filters.pack(anchor="w", padx=14, pady=(10, 2))
 
         filter_card = tk.Frame(sidebar, bg=BG_PANEL, padx=12)
         filter_card.pack(fill="x")
@@ -499,7 +551,7 @@ class OrbitTrackerApp:
         # Live Search
         tk.Label(filter_card, text="Search All Fields:", font=FONT_UI, fg=TEXT_MUTED, bg=BG_PANEL).pack(anchor="w")
         search_box = tk.Frame(filter_card, bg=BG_SURFACE, highlightthickness=1, highlightbackground=BORDER_COLOR)
-        search_box.pack(fill="x", pady=(2, 8))
+        search_box.pack(fill="x", pady=(2, 6))
 
         self.search_var = tk.StringVar()
         self.search_var.trace_add("write", lambda *a: self.on_filter_changed())
@@ -528,18 +580,44 @@ class OrbitTrackerApp:
         )
         btn_clear_search.pack(side="right", padx=2)
 
-        # Status Filter
-        tk.Label(filter_card, text="Filter by Status:", font=FONT_UI, fg=TEXT_MUTED, bg=BG_PANEL).pack(anchor="w")
+        # Work State Filter
+        tk.Label(filter_card, text="Filter by State / Status:", font=FONT_UI, fg=TEXT_MUTED, bg=BG_PANEL).pack(anchor="w")
         self.filter_status_var = tk.StringVar(value="All")
         cb_status = ttk.Combobox(
             filter_card,
             textvariable=self.filter_status_var,
-            values=["All", "Active", "Inactive"],
+            values=["All", "Working", "Stuck", "Done", "Idle", "Active", "Inactive"],
             state="readonly",
             font=FONT_UI
         )
-        cb_status.pack(fill="x", pady=(2, 8))
+        cb_status.pack(fill="x", pady=(1, 5))
         cb_status.bind("<<ComboboxSelected>>", lambda e: self.on_filter_changed())
+
+        # Device Type Filter
+        tk.Label(filter_card, text="Filter by Device Type:", font=FONT_UI, fg=TEXT_MUTED, bg=BG_PANEL).pack(anchor="w")
+        self.filter_dev_var = tk.StringVar(value="All")
+        self.cb_filter_dev = ttk.Combobox(
+            filter_card,
+            textvariable=self.filter_dev_var,
+            values=["All"],
+            state="readonly",
+            font=FONT_UI
+        )
+        self.cb_filter_dev.pack(fill="x", pady=(1, 5))
+        self.cb_filter_dev.bind("<<ComboboxSelected>>", lambda e: self.on_filter_changed())
+
+        # Category Filter
+        tk.Label(filter_card, text="Filter by Category:", font=FONT_UI, fg=TEXT_MUTED, bg=BG_PANEL).pack(anchor="w")
+        self.filter_cat_var = tk.StringVar(value="All")
+        self.cb_filter_cat = ttk.Combobox(
+            filter_card,
+            textvariable=self.filter_cat_var,
+            values=["All"],
+            state="readonly",
+            font=FONT_UI
+        )
+        self.cb_filter_cat.pack(fill="x", pady=(1, 5))
+        self.cb_filter_cat.bind("<<ComboboxSelected>>", lambda e: self.on_filter_changed())
 
         # Department Filter
         tk.Label(filter_card, text="Filter by Department:", font=FONT_UI, fg=TEXT_MUTED, bg=BG_PANEL).pack(anchor="w")
@@ -551,7 +629,7 @@ class OrbitTrackerApp:
             state="readonly",
             font=FONT_UI
         )
-        self.cb_filter_dept.pack(fill="x", pady=(2, 8))
+        self.cb_filter_dept.pack(fill="x", pady=(1, 6))
         self.cb_filter_dept.bind("<<ComboboxSelected>>", lambda e: self.on_filter_changed())
 
         btn_reset_filters = tk.Button(
@@ -581,7 +659,7 @@ class OrbitTrackerApp:
             relief="flat",
             anchor="w",
             padx=12,
-            pady=4,
+            pady=3,
             cursor="hand2",
             command=command
         )
@@ -595,11 +673,9 @@ class OrbitTrackerApp:
         self.paned = tk.PanedWindow(parent, orient="horizontal", bg=BG_MAIN, sashwidth=4, sashrelief="flat")
         self.paned.pack(side="left", fill="both", expand=True)
 
-        # 1. Left pane: Main Data Grid
         grid_frame = tk.Frame(self.paned, bg=BG_PANEL, highlightthickness=1, highlightbackground=BORDER_COLOR)
-        self.paned.add(grid_frame, minsize=420, stretch="always")
+        self.paned.add(grid_frame, minsize=460, stretch="always")
 
-        # Grid Header Bar
         grid_top = tk.Frame(grid_frame, bg=BG_SURFACE, height=36)
         grid_top.pack(fill="x")
         grid_top.pack_propagate(False)
@@ -610,7 +686,6 @@ class OrbitTrackerApp:
         self.lbl_grid_count = tk.Label(grid_top, text="Showing: 0 / 0 items", font=FONT_CODE, fg=TEXT_MUTED, bg=BG_SURFACE)
         self.lbl_grid_count.pack(side="right", padx=10, pady=8)
 
-        # Treeview Container
         tree_container = tk.Frame(grid_frame, bg=BG_PANEL)
         tree_container.pack(fill="both", expand=True)
 
@@ -631,27 +706,27 @@ class OrbitTrackerApp:
         self.tree_scroll_x.pack(side="bottom", fill="x")
         self.tree.pack(fill="both", expand=True)
 
-        # Configure Tree Tags for Row Coloring
+        # Tags for row coloring
         self.tree.tag_configure("active_row", foreground=TEXT_PRIMARY)
         self.tree.tag_configure("inactive_row", foreground=TEXT_MUTED)
+        self.tree.tag_configure("state_stuck", foreground="#ff7b72")
+        self.tree.tag_configure("state_working", foreground="#79c0ff")
 
-        # Treeview Events
         self.tree.bind("<<TreeviewSelect>>", self.on_item_selected)
         self.tree.bind("<Double-1>", lambda e: self.on_edit_item())
         self.tree.bind("<Button-3>", self.show_context_menu)
+        self.tree.bind("<ButtonPress-1>", self.on_tree_button_press, add="+")
+        self.tree.bind("<B1-Motion>", self.on_tree_button_motion, add="+")
+        self.tree.bind("<ButtonRelease-1>", self.on_tree_button_release, add="+")
 
-        # Right-Click Context Menu
         self.build_context_menu()
 
-        # 2. Right pane: Item Details & Service Log Timeline
+        # Right pane: Inspector
         self.inspector_frame = tk.Frame(self.paned, bg=BG_PANEL, highlightthickness=1, highlightbackground=BORDER_COLOR)
-        self.paned.add(self.inspector_frame, minsize=340, width=440, stretch="never")
+        self.paned.add(self.inspector_frame, minsize=350, width=450, stretch="never")
 
         self.build_inspector_ui()
 
-    # --------------------------------------------------------------------------
-    # CONTEXT MENU
-    # --------------------------------------------------------------------------
     def build_context_menu(self):
         self.ctx_menu = tk.Menu(self.root, tearoff=0, bg=BG_SURFACE, fg=TEXT_PRIMARY,
                                 activebackground=ACCENT_CYAN, activeforeground=BG_MAIN, font=FONT_UI)
@@ -670,10 +745,9 @@ class OrbitTrackerApp:
             self.ctx_menu.tk_popup(event.x_root, event.y_root)
 
     # --------------------------------------------------------------------------
-    # INSPECTOR PANEL (SERVICE LOG TIMELINE)
+    # INSPECTOR PANEL
     # --------------------------------------------------------------------------
     def build_inspector_ui(self):
-        # Header banner
         insp_header = tk.Frame(self.inspector_frame, bg=BG_SURFACE, height=36)
         insp_header.pack(fill="x")
         insp_header.pack_propagate(False)
@@ -684,7 +758,6 @@ class OrbitTrackerApp:
         self.lbl_insp_queue = tk.Label(insp_header, text="No Selection", font=FONT_CODE_BOLD, fg=TEXT_MUTED, bg=BG_SURFACE)
         self.lbl_insp_queue.pack(side="right", padx=10, pady=8)
 
-        # Placeholder frame when no item is selected
         self.frame_no_selection = tk.Frame(self.inspector_frame, bg=BG_PANEL)
         self.frame_no_selection.pack(fill="both", expand=True, padx=20, pady=40)
 
@@ -692,38 +765,38 @@ class OrbitTrackerApp:
         tk.Label(self.frame_no_selection, text="No Item Selected", font=FONT_UI_BOLD, fg=TEXT_PRIMARY, bg=BG_PANEL).pack()
         tk.Label(
             self.frame_no_selection,
-            text="Select an item from the workstation database\nto inspect equipment details, custom attributes,\nand view or append maintenance service notes.",
+            text="Select an item from the workstation database\nto inspect equipment attributes, device types, categories,\nand view or append maintenance service notes.",
             font=FONT_UI,
             fg=TEXT_MUTED,
             bg=BG_PANEL,
             justify="center"
         ).pack(pady=8)
 
-        # Active Inspector Content Frame
         self.frame_selection_content = tk.Frame(self.inspector_frame, bg=BG_PANEL)
 
         # 1. Item Details Card
         self.card_details = tk.Frame(self.frame_selection_content, bg=BG_SURFACE, highlightthickness=1, highlightbackground=BORDER_COLOR, padx=12, pady=10)
         self.card_details.pack(fill="x", padx=10, pady=(8, 4))
 
-        # Title & Status row
+        # Title & Badges
         r_top = tk.Frame(self.card_details, bg=BG_SURFACE)
         r_top.pack(fill="x", pady=(0, 4))
-        self.lbl_item_name = tk.Label(r_top, text="Item Name", font=FONT_UI_BOLD, fg=TEXT_PRIMARY, bg=BG_SURFACE, wraplength=260, justify="left")
+        self.lbl_item_name = tk.Label(r_top, text="Item Name", font=FONT_UI_BOLD, fg=TEXT_PRIMARY, bg=BG_SURFACE, wraplength=230, justify="left")
         self.lbl_item_name.pack(side="left")
+
+        self.lbl_work_state_pill = tk.Label(r_top, text="DONE", font=("Segoe UI", 7, "bold"), fg=COLOR_DONE, bg=BG_ACTIVE, padx=6, pady=2)
+        self.lbl_work_state_pill.pack(side="right", padx=(4, 0))
 
         self.lbl_item_status_pill = tk.Label(r_top, text="ACTIVE", font=FONT_CODE_BOLD, fg=ACCENT_MINT, bg=BG_ACTIVE, padx=6, pady=2)
         self.lbl_item_status_pill.pack(side="right")
 
-        # Info Grid
         self.lbl_item_specs = tk.Label(self.card_details, text="", font=FONT_UI, fg=TEXT_MUTED, bg=BG_SURFACE, justify="left")
         self.lbl_item_specs.pack(anchor="w", pady=(2, 4))
 
-        # Custom Fields block
         self.lbl_custom_specs = tk.Label(self.card_details, text="", font=FONT_CODE, fg=ACCENT_CYAN, bg=BG_SURFACE, justify="left")
         self.lbl_custom_specs.pack(anchor="w", pady=(2, 0))
 
-        # Action bar for selected item
+        # Action bar
         action_bar = tk.Frame(self.card_details, bg=BG_SURFACE)
         action_bar.pack(fill="x", pady=(8, 0))
 
@@ -761,32 +834,53 @@ class OrbitTrackerApp:
         )
         btn_add_note.pack(side="right")
 
-        # Filter strip above timeline: All / Maintenance / Quick Notes
+        # Filter strip above timeline
         tf_bar = tk.Frame(sec_log, bg=BG_PANEL)
         tf_bar.pack(fill="x", pady=(0, 6))
 
         self.btn_tf_all = tk.Button(
             tf_bar, text="All", font=("Segoe UI", 8, "bold"), fg=ACCENT_CYAN, bg=BG_ACTIVE,
-            activebackground=BG_ACTIVE, relief="flat", padx=8, pady=1, cursor="hand2",
+            activebackground=BG_ACTIVE, relief="flat", padx=6, pady=1, cursor="hand2",
             command=lambda: self.set_timeline_filter("all")
         )
-        self.btn_tf_all.pack(side="left", padx=(0, 3))
+        self.btn_tf_all.pack(side="left", padx=(0, 2))
 
         self.btn_tf_maint = tk.Button(
-            tf_bar, text="🛠️ Maintenance", font=("Segoe UI", 8), fg=TEXT_MUTED, bg=BG_SURFACE,
-            activebackground=BG_ACTIVE, relief="flat", padx=8, pady=1, cursor="hand2",
+            tf_bar, text="🛠️ Maint", font=("Segoe UI", 8), fg=TEXT_MUTED, bg=BG_SURFACE,
+            activebackground=BG_ACTIVE, relief="flat", padx=6, pady=1, cursor="hand2",
             command=lambda: self.set_timeline_filter("maintenance")
         )
-        self.btn_tf_maint.pack(side="left", padx=3)
+        self.btn_tf_maint.pack(side="left", padx=2)
 
         self.btn_tf_quick = tk.Button(
-            tf_bar, text="⚡ Quick Notes", font=("Segoe UI", 8), fg=TEXT_MUTED, bg=BG_SURFACE,
-            activebackground=BG_ACTIVE, relief="flat", padx=8, pady=1, cursor="hand2",
+            tf_bar, text="🔭 Notes", font=("Segoe UI", 8), fg=TEXT_MUTED, bg=BG_SURFACE,
+            activebackground=BG_ACTIVE, relief="flat", padx=6, pady=1, cursor="hand2",
             command=lambda: self.set_timeline_filter("quick")
         )
-        self.btn_tf_quick.pack(side="left", padx=3)
+        self.btn_tf_quick.pack(side="left", padx=2)
 
-        # Scrollable Canvas for Timeline Notes
+        self.btn_tf_working = tk.Button(
+            tf_bar, text="Working", font=("Segoe UI", 8), fg=TEXT_MUTED, bg=BG_SURFACE,
+            activebackground=BG_ACTIVE, relief="flat", padx=6, pady=1, cursor="hand2",
+            command=lambda: self.set_timeline_filter("working")
+        )
+        self.btn_tf_working.pack(side="left", padx=2)
+
+        self.btn_tf_stuck = tk.Button(
+            tf_bar, text="⚠️ Stuck", font=("Segoe UI", 8), fg=TEXT_MUTED, bg=BG_SURFACE,
+            activebackground=BG_ACTIVE, relief="flat", padx=6, pady=1, cursor="hand2",
+            command=lambda: self.set_timeline_filter("stuck")
+        )
+        self.btn_tf_stuck.pack(side="left", padx=2)
+
+        self.btn_tf_done = tk.Button(
+            tf_bar, text="✅ Done", font=("Segoe UI", 8), fg=TEXT_MUTED, bg=BG_SURFACE,
+            activebackground=BG_ACTIVE, relief="flat", padx=6, pady=1, cursor="hand2",
+            command=lambda: self.set_timeline_filter("done")
+        )
+        self.btn_tf_done.pack(side="left", padx=2)
+
+        # Scrollable Canvas
         timeline_container = tk.Frame(sec_log, bg=BG_SURFACE, highlightthickness=1, highlightbackground=BORDER_COLOR)
         timeline_container.pack(fill="both", expand=True)
 
@@ -808,7 +902,7 @@ class OrbitTrackerApp:
         self.timeline_canvas.pack(side="left", fill="both", expand=True)
         self.timeline_scroll.pack(side="right", fill="y")
 
-        # Quick Inline Note Add Entry at bottom of inspector
+        # Quick Add Entry
         quick_add = tk.Frame(sec_log, bg=BG_PANEL)
         quick_add.pack(fill="x", pady=(6, 0))
 
@@ -820,8 +914,8 @@ class OrbitTrackerApp:
         self.entry_quick_note.bind("<Return>", lambda e: self.on_quick_add_note())
 
         btn_quick_add = tk.Button(
-            quick_add, text="⚡ Quick Log", font=FONT_UI_BOLD, fg=BG_MAIN, bg="#bc8cff",
-            activebackground="#d2a8ff", relief="flat", padx=10, pady=2, cursor="hand2", command=self.on_quick_add_note
+            quick_add, text="🔭 Quick Note", font=FONT_UI_BOLD, fg=BG_MAIN, bg="#f0883e",
+            activebackground="#ffa756", relief="flat", padx=10, pady=2, cursor="hand2", command=self.on_quick_add_note
         )
         btn_quick_add.pack(side="right")
 
@@ -832,7 +926,6 @@ class OrbitTrackerApp:
         bottom_container = tk.Frame(self.root, bg=BG_MAIN)
         bottom_container.pack(fill="x", side="bottom", padx=12, pady=(0, 6))
 
-        # Activity Log Console (Collapsible)
         self.console_frame = tk.Frame(bottom_container, bg=BG_PANEL, height=100, highlightthickness=1, highlightbackground=BORDER_COLOR)
         self.console_frame.pack(fill="x", pady=(0, 4))
         self.console_frame.pack_propagate(False)
@@ -849,7 +942,6 @@ class OrbitTrackerApp:
         )
         btn_clear.pack(side="right", padx=6)
 
-        # Log Text Box
         self.log_text = tk.Text(
             self.console_frame, font=FONT_CODE, bg=BG_PANEL, fg=TEXT_PRIMARY,
             relief="flat", wrap="word", height=4
@@ -861,7 +953,6 @@ class OrbitTrackerApp:
         self.log_text.tag_configure("ERROR", foreground=ACCENT_CORAL)
         self.log_text.tag_configure("DIM", foreground=TEXT_MUTED)
 
-        # Bottom Status Bar
         statusbar = tk.Frame(bottom_container, bg=BG_PANEL, height=26, highlightthickness=1, highlightbackground=BORDER_COLOR)
         statusbar.pack(fill="x")
         statusbar.pack_propagate(False)
@@ -879,16 +970,19 @@ class OrbitTrackerApp:
     # DATA GRID MANAGEMENT & REFRESH
     # ==========================================================================
     def configure_columns(self):
-        """Configures the Treeview columns based on core fields + user dynamic custom columns."""
+        """Configures the Treeview columns based on core fields + Device Type, Category, and Custom columns."""
         core_cols = [
             ("queue_number", "Queue #", 80),
             ("moc_number", "MOC #", 95),
             ("st_number", "ST #", 90),
-            ("item_name", "Item Name", 190),
-            ("make_and_model", "Make & Model", 160),
+            ("item_name", "Item Name", 180),
+            ("make_and_model", "Make & Model", 150),
+            ("device_type", "Device Type", 130),
+            ("category", "Category", 120),
+            ("work_status", "State", 85),
             ("status", "Status", 75),
-            ("department", "Department", 140),
-            ("service_log", "Service Log", 100),
+            ("department", "Department", 130),
+            ("service_log", "Service Log", 95),
         ]
 
         custom_cols = []
@@ -899,6 +993,18 @@ class OrbitTrackerApp:
         col_ids = [c[0] for c in all_cols]
 
         self.tree.config(columns=col_ids, show="headings")
+
+        # Synchronize and preserve column ordering for movable columns
+        if not getattr(self, "column_order", None):
+            self.column_order = list(col_ids)
+        else:
+            ordered = [c for c in self.column_order if c in col_ids]
+            for c in col_ids:
+                if c not in ordered:
+                    ordered.append(c)
+            self.column_order = ordered
+
+        self.tree.config(displaycolumns=self.column_order)
 
         for c_id, c_name, c_width in all_cols:
             header_text = c_name
@@ -911,31 +1017,101 @@ class OrbitTrackerApp:
                 text=header_text,
                 command=lambda col=c_id: self.on_sort_column(col)
             )
-            self.tree.column(c_id, width=c_width, minwidth=60, anchor="w")
+            w = self.column_widths.get(c_id, c_width)
+            self.tree.column(c_id, width=w, minwidth=50, stretch=False, anchor="w")
 
         # Specific column alignments
         self.tree.column("queue_number", anchor="center")
+        self.tree.column("work_status", anchor="center")
         self.tree.column("status", anchor="center")
         self.tree.column("service_log", anchor="center")
+
+    def on_tree_button_press(self, event):
+        region = self.tree.identify_region(event.x, event.y)
+        if region == "heading":
+            col_str = self.tree.identify_column(event.x)
+            try:
+                col_idx = int(col_str.replace("#", "")) - 1
+                if hasattr(self, "column_order") and self.column_order and 0 <= col_idx < len(self.column_order):
+                    self._drag_start_x = event.x
+                    self._drag_start_y = event.y
+                    self._drag_col_idx = col_idx
+                    self._drag_active = False
+            except (ValueError, TypeError):
+                self._drag_col_idx = None
+        else:
+            self._drag_col_idx = None
+            self._drag_active = False
+
+    def on_tree_button_motion(self, event):
+        if self._drag_col_idx is not None:
+            dx = abs(event.x - self._drag_start_x)
+            if dx > 8:
+                self._drag_active = True
+                self.root.config(cursor="sb_h_double_arrow")
+
+    def on_tree_button_release(self, event):
+        if self._drag_active and self._drag_col_idx is not None:
+            self.root.config(cursor="")
+            target_str = self.tree.identify_column(event.x)
+            try:
+                target_idx = int(target_str.replace("#", "")) - 1
+                if hasattr(self, "column_order") and self.column_order and 0 <= target_idx < len(self.column_order):
+                    if target_idx != self._drag_col_idx:
+                        col_id = self.column_order.pop(self._drag_col_idx)
+                        self.column_order.insert(target_idx, col_id)
+                        self.tree.config(displaycolumns=self.column_order)
+                        self.save_config()
+                        self.log_message(f"Reordered column to position {target_idx + 1}.", level="INFO")
+            except (ValueError, TypeError):
+                pass
+            self._drag_col_idx = None
+            self._drag_active = False
+            self._suppress_sort = True
+            self.root.after(150, lambda: setattr(self, "_suppress_sort", False))
+            return "break"
+        else:
+            self.root.config(cursor="")
+            self._drag_col_idx = None
+            self._drag_active = False
+
+        self.record_current_column_widths()
+
+    def record_current_column_widths(self):
+        try:
+            cols = self.tree["columns"]
+            changed = False
+            for col in cols:
+                w = self.tree.column(col, "width")
+                if w and w > 20 and self.column_widths.get(col) != w:
+                    self.column_widths[col] = w
+                    changed = True
+            if changed:
+                self.save_config()
+        except Exception:
+            pass
 
     def refresh_table(self):
         """Refreshes the Treeview with current filters and columns."""
         self.configure_columns()
 
-        # Preserve selection
         prev_selected = self.selected_item_id
 
-        # Clear existing items
         for r in self.tree.get_children():
             self.tree.delete(r)
 
         query = self.search_var.get()
         status_filter = self.filter_status_var.get()
+        dev_filter = self.filter_dev_var.get()
+        cat_filter = self.filter_cat_var.get()
         dept_filter = self.filter_dept_var.get()
 
         filtered = self.db.filter_items(
             query=query,
-            status_filter=status_filter,
+            status_filter=status_filter if status_filter in ("Active", "Inactive") else "All",
+            work_status_filter=status_filter if status_filter in ("Done", "Working", "Stuck", "Idle") else "All",
+            device_type_filter=dev_filter,
+            category_filter=cat_filter,
             department_filter=dept_filter,
             sort_by=self.sort_column,
             sort_desc=self.sort_desc
@@ -944,6 +1120,7 @@ class OrbitTrackerApp:
         for it in filtered:
             notes_count = len(it.service_log)
             notes_str = f"📝 {notes_count} note{'s' if notes_count != 1 else ''}"
+            w_state = it.get_work_status()
 
             vals = [
                 it.queue_number,
@@ -951,16 +1128,27 @@ class OrbitTrackerApp:
                 it.st_number,
                 it.item_name,
                 it.make_and_model,
+                getattr(it, "device_type", "Unspecified"),
+                getattr(it, "category", "General"),
+                w_state,
                 it.status,
                 it.department,
                 notes_str
             ]
 
-            # Append custom column values
             for c in self.db.custom_columns:
                 vals.append(it.custom_fields.get(c["id"], ""))
 
-            tag = "active_row" if it.status == "Active" else "inactive_row"
+            # Tag selection
+            if w_state == "Stuck":
+                tag = "state_stuck"
+            elif w_state == "Working":
+                tag = "state_working"
+            elif it.status == "Active":
+                tag = "active_row"
+            else:
+                tag = "inactive_row"
+
             self.tree.insert("", "end", iid=it.id, values=vals, tags=(tag,))
 
         # Update Grid count label
@@ -968,16 +1156,15 @@ class OrbitTrackerApp:
         shown_items = len(filtered)
         self.lbl_grid_count.config(text=f"Showing: {shown_items} / {total_items} items")
 
-        # Update Department combobox values
-        known_depts = ["All"] + self.db.get_departments()
-        self.cb_filter_dept.config(values=known_depts)
+        # Update Filter combobox values
+        self.cb_filter_dept.config(values=["All"] + self.db.get_departments())
+        self.cb_filter_dev.config(values=["All"] + self.db.get_device_types())
+        self.cb_filter_cat.config(values=["All"] + self.db.get_categories())
 
-        # Restore selection if possible
         if prev_selected and self.tree.exists(prev_selected):
             self.tree.selection_set(prev_selected)
             self.tree.see(prev_selected)
         elif shown_items > 0 and not prev_selected:
-            # Select first item
             first_id = self.tree.get_children()[0]
             self.tree.selection_set(first_id)
 
@@ -987,8 +1174,10 @@ class OrbitTrackerApp:
     def update_metrics_cards(self):
         m = self.db.get_metrics()
         self.lbl_metric_total.config(text=str(m["total_items"]))
-        self.lbl_metric_active.config(text=str(m["active_items"]))
-        self.lbl_metric_inactive.config(text=str(m["inactive_items"]))
+        self.lbl_metric_working.config(text=str(m["working_count"]))
+        self.lbl_metric_stuck.config(text=str(m["stuck_count"]))
+        self.lbl_metric_done.config(text=str(m["done_count"]))
+        self.lbl_metric_idle.config(text=str(m["idle_count"]))
         self.lbl_metric_notes.config(text=str(m["total_notes"]))
 
     def update_status_bar(self):
@@ -996,7 +1185,7 @@ class OrbitTrackerApp:
         self.lbl_status_db.config(text=f"Database: {rel_path}")
 
         m = self.db.get_metrics()
-        self.lbl_status_stats.config(text=f"Records: {m['total_items']} | Active: {m['active_items']} | Inactive: {m['inactive_items']}")
+        self.lbl_status_stats.config(text=f"Units: {m['total_items']} | Working: {m['working_count']} | Stuck: {m['stuck_count']} | Done: {m['done_count']}")
 
         if self.db.is_dirty:
             self.lbl_status_dirty.config(text="● Unsaved Changes", fg=ACCENT_GOLD)
@@ -1009,6 +1198,9 @@ class OrbitTrackerApp:
     # SORTING & FILTERING
     # --------------------------------------------------------------------------
     def on_sort_column(self, col_id):
+        if getattr(self, "_suppress_sort", False):
+            self._suppress_sort = False
+            return
         if self.sort_column == col_id:
             self.sort_desc = not self.sort_desc
         else:
@@ -1022,6 +1214,8 @@ class OrbitTrackerApp:
     def on_reset_filters(self):
         self.search_var.set("")
         self.filter_status_var.set("All")
+        self.filter_dev_var.set("All")
+        self.filter_cat_var.set("All")
         self.filter_dept_var.set("All")
         self.refresh_table()
 
@@ -1052,16 +1246,21 @@ class OrbitTrackerApp:
         status_fg = ACCENT_MINT if item.status == "Active" else ACCENT_CORAL
         self.lbl_item_status_pill.config(text=item.status.upper(), fg=status_fg)
 
+        w_state = item.get_work_status()
+        state_col = COLOR_DONE if w_state == "Done" else (COLOR_WORKING if w_state == "Working" else (COLOR_STUCK if w_state == "Stuck" else COLOR_IDLE))
+        self.lbl_work_state_pill.config(text=w_state.upper(), fg=state_col)
+
         specs_text = (
-            f"MOC Number: {item.moc_number or '—'}\n"
-            f"ST Number:  {item.st_number or '—'}\n"
-            f"Make/Model: {item.make_and_model or '—'}\n"
-            f"Department: {item.department or '—'}\n"
-            f"Created:    {item.created_at}"
+            f"Device Type: {getattr(item, 'device_type', 'Unspecified')}\n"
+            f"Category:    {getattr(item, 'category', 'General')}\n"
+            f"MOC Number:  {item.moc_number or '—'}\n"
+            f"ST Number:   {item.st_number or '—'}\n"
+            f"Make/Model:  {item.make_and_model or '—'}\n"
+            f"Department:  {item.department or '—'}\n"
+            f"Created:     {item.created_at}"
         )
         self.lbl_item_specs.config(text=specs_text)
 
-        # Custom Fields text
         if self.db.custom_columns:
             c_lines = []
             for col in self.db.custom_columns:
@@ -1071,33 +1270,27 @@ class OrbitTrackerApp:
         else:
             self.lbl_custom_specs.config(text="")
 
-        # Refresh Timeline Cards
         self.refresh_timeline(item)
 
     def set_timeline_filter(self, mode):
         self.timeline_filter = mode
-        self.btn_tf_all.config(
-            bg=BG_ACTIVE if mode == "all" else BG_SURFACE,
-            fg=ACCENT_CYAN if mode == "all" else TEXT_MUTED,
-            font=("Segoe UI", 8, "bold" if mode == "all" else "normal")
-        )
-        self.btn_tf_maint.config(
-            bg=BG_ACTIVE if mode == "maintenance" else BG_SURFACE,
-            fg=ACCENT_MINT if mode == "maintenance" else TEXT_MUTED,
-            font=("Segoe UI", 8, "bold" if mode == "maintenance" else "normal")
-        )
-        self.btn_tf_quick.config(
-            bg=BG_ACTIVE if mode == "quick" else BG_SURFACE,
-            fg="#bc8cff" if mode == "quick" else TEXT_MUTED,
-            font=("Segoe UI", 8, "bold" if mode == "quick" else "normal")
-        )
+        modes = ["all", "maintenance", "quick", "working", "stuck", "done"]
+        for m in modes:
+            btn = getattr(self, f"btn_tf_{m}", None)
+            if btn:
+                is_active = (mode == m)
+                col = ACCENT_CYAN if m in ("all", "working") else (ACCENT_MINT if m in ("maintenance", "done") else (ACCENT_CORAL if m == "stuck" else "#f0883e"))
+                btn.config(
+                    bg=BG_ACTIVE if is_active else BG_SURFACE,
+                    fg=col if is_active else TEXT_MUTED,
+                    font=("Segoe UI", 8, "bold" if is_active else "normal")
+                )
         if self.selected_item_id:
             item = self.db.get_item_by_id(self.selected_item_id)
             if item:
                 self.refresh_timeline(item)
 
     def refresh_timeline(self, item):
-        # Clear existing timeline cards
         for w in self.timeline_cards_frame.winfo_children():
             w.destroy()
 
@@ -1106,6 +1299,9 @@ class OrbitTrackerApp:
             notes = [n for n in all_notes if n.note_type != "quick"]
         elif self.timeline_filter == "quick":
             notes = [n for n in all_notes if n.note_type == "quick"]
+        elif self.timeline_filter in ("working", "stuck", "done"):
+            target_state = self.timeline_filter.capitalize()
+            notes = [n for n in all_notes if getattr(n, "work_status", "Done") == target_state]
         else:
             notes = all_notes
 
@@ -1124,7 +1320,6 @@ class OrbitTrackerApp:
             lbl_empty.pack(fill="x")
             return
 
-        # Display notes in reverse chronological order (newest first)
         for note in reversed(notes):
             self.create_timeline_card(item, note)
 
@@ -1139,19 +1334,47 @@ class OrbitTrackerApp:
         )
         card.pack(fill="x", pady=4, padx=2)
 
-        # Header: Timestamp + Badge + Actions
         top = tk.Frame(card, bg=BG_SURFACE)
         top.pack(fill="x", pady=(0, 6))
 
         lbl_ts = tk.Label(top, text=f"🕒 {note.timestamp}", font=FONT_CODE_BOLD, fg=ACCENT_GOLD, bg=BG_SURFACE)
         lbl_ts.pack(side="left")
 
-        # Type badge
+        # Type & Classification badge: Quick notes have Observation tag (Orange) with no work state
         if note.note_type == "quick":
-            badge_lbl = tk.Label(top, text="⚡ QUICK NOTE", font=("Segoe UI", 7, "bold"), fg="#bc8cff", bg=BG_PANEL, padx=6, pady=1)
+            badge_lbl = tk.Label(
+                top,
+                text="🔭 OBSERVATION",
+                font=("Segoe UI", 7, "bold"),
+                fg="#f0883e",
+                bg="#2d2218",
+                highlightthickness=1,
+                highlightbackground="#d97706",
+                padx=6,
+                pady=1
+            )
+            badge_lbl.pack(side="left", padx=4)
         else:
-            badge_lbl = tk.Label(top, text="🛠️ MAINTENANCE", font=("Segoe UI", 7, "bold"), fg=ACCENT_CYAN, bg=BG_PANEL, padx=6, pady=1)
-        badge_lbl.pack(side="left", padx=8)
+            badge_lbl = tk.Label(top, text="🛠️ MAINT", font=("Segoe UI", 7, "bold"), fg=ACCENT_CYAN, bg=BG_PANEL, padx=5, pady=1)
+            badge_lbl.pack(side="left", padx=4)
+
+            # Work State badge (Done, Working, Stuck, Idle) for maintenance notes
+            ws = getattr(note, "work_status", "Done")
+            ws_col = COLOR_DONE if ws == "Done" else (COLOR_WORKING if ws == "Working" else (COLOR_STUCK if ws == "Stuck" else COLOR_IDLE))
+            ws_lbl = tk.Label(top, text=ws.upper(), font=("Segoe UI", 7, "bold"), fg=ws_col, bg=BG_PANEL, padx=5, pady=1)
+            ws_lbl.pack(side="left", padx=3)
+
+            # Severity badge if not Routine
+            sev = getattr(note, "severity", "Routine")
+            if sev and sev != "Routine":
+                sev_col = ACCENT_CORAL if sev in ("Critical", "High") else ACCENT_GOLD
+                sev_lbl = tk.Label(top, text=sev.upper(), font=("Segoe UI", 7, "bold"), fg=sev_col, bg=BG_PANEL, padx=4, pady=1)
+                sev_lbl.pack(side="left", padx=3)
+
+        # Technician attribution
+        tech = getattr(note, "technician", "")
+        if tech:
+            tk.Label(top, text=f"👤 {tech}", font=("Segoe UI", 7), fg=TEXT_MUTED, bg=BG_SURFACE).pack(side="left", padx=4)
 
         btn_del_note = tk.Button(
             top, text="✕", font=("Segoe UI", 7), fg=TEXT_MUTED, bg=BG_SURFACE,
@@ -1184,7 +1407,7 @@ class OrbitTrackerApp:
             lbl_content.pack(anchor="w")
             lbl_content.bind("<Double-Button-1>", lambda e, n=note: self.on_edit_service_note(item.id, n))
         else:
-            # Problem (Required)
+            # Problem
             r_prob = tk.Frame(body, bg=BG_SURFACE)
             r_prob.pack(fill="x", pady=(1, 2))
             tk.Label(r_prob, text="Problem: ", font=FONT_LABEL, fg=ACCENT_GOLD, bg=BG_SURFACE).pack(side="left", anchor="nw")
@@ -1192,7 +1415,14 @@ class OrbitTrackerApp:
             lbl_prob.pack(side="left", fill="x", expand=True, anchor="w")
             lbl_prob.bind("<Double-Button-1>", lambda e, n=note: self.on_edit_service_note(item.id, n))
 
-            # Root Cause (if populated)
+            # Service Type
+            if getattr(note, "service_type", "") and note.service_type != "Corrective Repair":
+                r_stype = tk.Frame(body, bg=BG_SURFACE)
+                r_stype.pack(fill="x", pady=1)
+                tk.Label(r_stype, text="Type: ", font=FONT_LABEL, fg=TEXT_MUTED, bg=BG_SURFACE).pack(side="left", anchor="nw")
+                tk.Label(r_stype, text=note.service_type, font=FONT_UI, fg=TEXT_MUTED, bg=BG_SURFACE).pack(side="left")
+
+            # Root Cause
             if note.root_cause:
                 r_root = tk.Frame(body, bg=BG_SURFACE)
                 r_root.pack(fill="x", pady=1)
@@ -1201,7 +1431,7 @@ class OrbitTrackerApp:
                 lbl_root.pack(side="left", fill="x", expand=True, anchor="w")
                 lbl_root.bind("<Double-Button-1>", lambda e, n=note: self.on_edit_service_note(item.id, n))
 
-            # Action Taken (if populated)
+            # Action Taken
             if note.action_taken:
                 r_act = tk.Frame(body, bg=BG_SURFACE)
                 r_act.pack(fill="x", pady=1)
@@ -1210,7 +1440,7 @@ class OrbitTrackerApp:
                 lbl_act.pack(side="left", fill="x", expand=True, anchor="w")
                 lbl_act.bind("<Double-Button-1>", lambda e, n=note: self.on_edit_service_note(item.id, n))
 
-            # Parts / Materials Consumed (if populated)
+            # Parts Consumed
             if note.parts_consumed:
                 r_parts = tk.Frame(body, bg=BG_SURFACE)
                 r_parts.pack(fill="x", pady=(3, 1))
@@ -1226,7 +1456,6 @@ class OrbitTrackerApp:
                 lbl_parts.pack(side="left")
                 lbl_parts.bind("<Double-Button-1>", lambda e, n=note: self.on_edit_service_note(item.id, n))
 
-        # Double-click card to edit natively
         card.bind("<Double-Button-1>", lambda e, n=note: self.on_edit_service_note(item.id, n))
 
     # ==========================================================================
@@ -1242,6 +1471,8 @@ class OrbitTrackerApp:
                 st_number=r["st_number"],
                 item_name=r["item_name"],
                 make_and_model=r["make_and_model"],
+                device_type=r.get("device_type", "Unspecified"),
+                category=r.get("category", "General"),
                 status=r["status"],
                 department=r["department"],
                 custom_fields=r["custom_fields"],
@@ -1249,7 +1480,7 @@ class OrbitTrackerApp:
                 queue_number=r["queue_number"],
                 initial_note_data=r.get("initial_note_data")
             )
-            self.log_message(f"Created work item [{item.queue_number}] {item.item_name}", level="SUCCESS")
+            self.log_message(f"Created work item [{item.queue_number}] {item.item_name} ({item.device_type})", level="SUCCESS")
             self.selected_item_id = item.id
             self.refresh_table()
             self.update_metrics_cards()
@@ -1276,6 +1507,8 @@ class OrbitTrackerApp:
                 st_number=r["st_number"],
                 item_name=r["item_name"],
                 make_and_model=r["make_and_model"],
+                device_type=r.get("device_type", "Unspecified"),
+                category=r.get("category", "General"),
                 status=r["status"],
                 department=r["department"],
                 custom_fields=r["custom_fields"]
@@ -1333,6 +1566,8 @@ class OrbitTrackerApp:
             st_number=item.st_number,
             item_name=f"{item.item_name} (Copy)",
             make_and_model=item.make_and_model,
+            device_type=item.device_type,
+            category=item.category,
             status=item.status,
             department=item.department,
             custom_fields=item.custom_fields,
@@ -1355,7 +1590,7 @@ class OrbitTrackerApp:
         if not item:
             return
 
-        dlg = ServiceNoteDialog(self.root, item)
+        dlg = ServiceNoteDialog(self.root, item, db=self.db)
         self.root.wait_window(dlg)
         if dlg.result:
             r = dlg.result
@@ -1368,10 +1603,17 @@ class OrbitTrackerApp:
                 action_taken=r.get("action_taken", ""),
                 parts_consumed=r.get("parts_consumed", ""),
                 quick_note=r.get("quick_note", ""),
+                work_status=r.get("work_status", "Done"),
+                severity=r.get("severity", "Routine"),
+                service_type=r.get("service_type", "Corrective Repair"),
+                technician=r.get("technician", ""),
                 note_text=r.get("note", "")
             )
             disp_txt = note.problem or note.quick_note or note.note
-            self.log_message(f"Logged {note.note_type} note for [{item.queue_number}]: {disp_txt[:35]}...", level="SUCCESS")
+            if note.note_type == "quick":
+                self.log_message(f"Logged observation note for [{item.queue_number}]: {disp_txt[:35]}...", level="SUCCESS")
+            else:
+                self.log_message(f"Logged {note.note_type} note for [{item.queue_number}]: {disp_txt[:35]}... (State: {note.work_status})", level="SUCCESS")
             self.refresh_table()
             self.update_metrics_cards()
             self.trigger_autosave_if_enabled()
@@ -1381,7 +1623,7 @@ class OrbitTrackerApp:
         if not item:
             return
 
-        dlg = ServiceNoteDialog(self.root, item, note=note)
+        dlg = ServiceNoteDialog(self.root, item, note=note, db=self.db)
         self.root.wait_window(dlg)
         if dlg.result:
             r = dlg.result
@@ -1395,10 +1637,15 @@ class OrbitTrackerApp:
                 action_taken=r.get("action_taken"),
                 parts_consumed=r.get("parts_consumed"),
                 quick_note=r.get("quick_note"),
+                work_status=r.get("work_status"),
+                severity=r.get("severity"),
+                service_type=r.get("service_type"),
+                technician=r.get("technician"),
                 note_text=r.get("note")
             )
             if updated:
-                self.log_message(f"Updated service note for [{item.queue_number}]", level="SUCCESS")
+                st_str = "Observation" if r.get("note_type") == "quick" else f"State: {r.get('work_status')}"
+                self.log_message(f"Updated service note for [{item.queue_number}] ({st_str})", level="SUCCESS")
                 self.refresh_table()
                 self.update_metrics_cards()
                 self.trigger_autosave_if_enabled()
@@ -1417,10 +1664,11 @@ class OrbitTrackerApp:
             item_id=item.id,
             note_type="quick",
             quick_note=text,
-            note_text=text
+            note_text=text,
+            work_status="Observation"
         )
         self.entry_quick_note.delete(0, "end")
-        self.log_message(f"Quick note logged for [{item.queue_number}]", level="SUCCESS")
+        self.log_message(f"Quick observation note logged for [{item.queue_number}]", level="SUCCESS")
         self.refresh_table()
         self.update_metrics_cards()
         self.trigger_autosave_if_enabled()
@@ -1435,7 +1683,7 @@ class OrbitTrackerApp:
             self.trigger_autosave_if_enabled()
 
     def on_show_analytics(self):
-        """Opens the interactive Work Performance & Maintenance Analytics graph dashboard."""
+        """Opens the interactive multi-period Work Performance & Maintenance Analytics graph dashboard."""
         dlg = WorkAnalyticsDialog(self.root, self.db)
         self.root.wait_window(dlg)
 
@@ -1503,7 +1751,6 @@ class OrbitTrackerApp:
             self.log_message(f"Initialized new database at: {file_path}", level="SUCCESS")
 
     def on_delete_db(self):
-        """Allows user to permanently delete the current database file after typing confirmation."""
         dlg = DeleteDatabaseDialog(self.root, db_path=self.db.db_path)
         self.root.wait_window(dlg)
 
@@ -1525,7 +1772,6 @@ class OrbitTrackerApp:
             self.log_message(f"Failed to delete database: {e}", level="ERROR")
             return
 
-        # Reset to default database path
         default_db_path = os.path.join(self.base_dir, "orbit_database.json")
         self.config["database_path"] = "orbit_database.json"
         self.save_config()
@@ -1534,8 +1780,6 @@ class OrbitTrackerApp:
         self.selected_item_id = None
         self.refresh_table()
         self.update_metrics_cards()
-
-        # Prompt user to create a new database or load demo
         self.prompt_database_init()
 
     def on_export_csv(self):

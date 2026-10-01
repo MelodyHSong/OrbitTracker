@@ -10,48 +10,58 @@
 
 - **📂 JSON-Backed Database**: Human-readable, portable, atomic writes that protect against data corruption.
 - **🔢 Auto-Generated Queue Numbers**: Dynamic sequential tracking (`Q-001`, `Q-002`, ...) that always follows the highest existing queue number in the database, automatically recalculating when items are added, modified, or deleted.
-- **📋 Pre-Defined Core Columns**:
+- **📋 Pre-Defined Core Columns & Workflow**:
   - **Queue Number**: Automatic sequence identifier following the highest record.
   - **MOC Number**: Management of Change / Work Order tracking identifier.
   - **ST Number**: Service Tag identifier.
   - **Item Name**: Name and description of the equipment or workpiece.
   - **Make and Model**: Hardware manufacturer and model.
-  - **Status**: Visual status toggling (`Active` / `Inactive`) with colored badges.
+  - **Device Type**: Equipment type classification (*Booster Pump*, *Transceiver*, *Actuator Solenoid*, *Power Inverter*, *Sensor*, etc.).
+  - **Category**: Engineering discipline dropdown (*Mechanical & Structural*, *Electrical & Avionics*, *Cryogenics & Propulsion*, *Hydraulics & Pneumatics*, *Thermal & Environmental*, *Optics & Payloads*, *Sensors & Telemetry*).
+  - **Status & Operational State**: Live state tracking (**Done**, **Working**, **Stuck**, **Idle**) with colored badges and status toggling (`Active` / `Inactive`).
   - **Department**: Assigned department with autocomplete suggestions from existing records.
   - **Service Log**: Chronological maintenance history timeline for each item.
-- **⚙️ Dynamic Custom Columns**: Add new user-defined fields (e.g. *Facility Bay*, *Serial Number*, *Assigned Technician*, *Priority*) at runtime. All items instantly inherit the schema.
-- **🛠️ Structured Service Note Diagnostics & Quick Notes**:
+- **🛡️ Non-Breaking Schema Auto-Migration**: Automatically migrates databases with custom columns named "Device Type" or "Category" into core fields with automated safety backups (`.pre_migration_backup`).
+- **⚙️ Dynamic Custom Columns**: Add new user-defined fields (e.g. *Facility Bay*, *Serial Number*, *Calibration Standard*, *Priority*) at runtime. All items instantly inherit the schema.
+- **🛠️ Overhauled Maintenance Diagnostics & Task Presets**:
   - **Structured Maintenance Logs**: Comprehensive engineering log entries with dedicated fields:
     - `Problem *` (Required): Core fault, failure mode, or inspection reason.
     - `Root Cause` (Optional): Underlying mechanical, electrical, or procedural cause.
     - `Action Taken` (Optional): Remediation steps, repairs, or procedures performed.
     - `Parts/Materials Consumed` (Optional): Replacement parts, serials, gaskets, lubricants, and materials used.
-  - **Dedicated Quick Notes**: Lightweight operational memos and shift handoffs visually distinguished with a dedicated `⚡ Quick Note` badge.
-  - **Dual-Channel Timeline Filtering**: Filter notes instantly between `All`, `🛠️ Maintenance`, and `⚡ Quick Notes`.
+    - `Work State`: Select **Done**, **Working**, **Stuck**, or **Idle** state for immediate operational awareness.
+    - `Severity & Service Type`: Classify severity (*Routine*, *Medium*, *High*, *Critical*) and service category (*Corrective Repair*, *Preventative Maintenance*, *Calibration*, *Inspection & Testing*, *Overhaul*).
+    - `Technician Attribution`: Capture operator or technician handling the job.
+  - **⚡ Quick Task Presets**: One-click menu templates in `ServiceNoteDialog` for instant auto-filling of common operational tasks.
+  - **Dedicated Quick Notes**: Lightweight operational memos and shift handoffs visually distinguished with a celestial `⚡ Quick Note` badge.
+  - **Faceted Timeline Navigation**: Filter notes instantly between `All`, `🛠️ Maintenance`, `⚡ Quick Notes`, `🔄 Working`, `⚠️ Stuck`, and `✅ Done`.
   - **Native In-App Note Editing**: Edit existing notes directly via timeline edit buttons (`✏`) or double-clicking any note card.
   - Quick inline logging directly from the inspector panel without modal dialogs.
   - Timestamped notes with full edit and delete capabilities.
-- **📊 Interactive Work Performance & Analytics Dashboard**:
+- **📊 Interactive Multi-Period Work Analytics Dashboard**:
   - Dedicated multi-tab vector canvas visualization modal accessible via header button, sidebar, or `Ctrl + G`.
-  - **5 Interactive Analytical Views**:
-    - **Activity Over Time**: Monthly service volume trends and activity velocity.
+  - **Multi-Period Aggregation**: Switch instantly between **Daily**, **Weekly**, **Monthly**, **Quarterly**, and **Yearly** analysis timeframes.
+  - **7 Interactive Analytical Views**:
+    - **Temporal Trends**: Volume trends and velocity curves across the chosen timeframe.
+    - **Device Types & Categories**: Distribution across hardware types and engineering categories.
+    - **Problems & Diagnostics**: Frequency analysis of root causes, error codes, and failure descriptions.
+    - **Parts Consumed Log**: Comprehensive parts utilization registry and consumption counts.
     - **Work by Department**: Comparative workload distributions across engineering units.
-    - **Equipment Service Intensity**: High-maintenance equipment ranking and service frequency.
-    - **Root Cause Breakdown**: Pareto distribution of failure modes and root causes.
-    - **Parts Consumed Inventory**: Comprehensive parts utilization registry and consumption frequencies.
-  - **Interactive Features**: Dynamic tooltips on hover, real-time KPI metrics, and lower data grid breakdowns.
+    - **Equipment Service Intensity**: High-maintenance equipment Pareto ranking.
+    - **Root Cause Breakdown**: Fault mode distribution and wear patterns.
+  - **Interactive Features**: Dynamic tooltips on hover, real-time KPI metrics, global filter controls (Device Type, Category, Work State), and lower data grid breakdowns.
 - **🔍 Instant Multi-Field Search & Filter**:
   - Live search across all core attributes, custom fields, and maintenance note content (including problem, root cause, action taken, and parts consumed).
-  - Segmented status filtering (`All`, `Active`, `Inactive`).
-  - Dropdown filter by Department.
-- **📊 Real-Time Metrics & KPI Cards**:
+  - Segmented work state & status filtering (`All`, `Working`, `Stuck`, `Done`, `Idle`, `Active`, `Inactive`).
+  - Dropdown filter by Device Type, Category, and Department.
+- **📊 Real-Time Metrics & KPI Status Matrix**:
   - Total Work Items count.
-  - Active vs. Inactive status counters.
+  - Real-time **Working**, **Stuck**, **Done**, and **Idle** counters.
   - Total service maintenance notes logged.
 - **🌱 Smart Database Initialization**: Missing or fresh database paths prompt users with a choice to load demo equipment data or start with a clean empty database.
 - **🛡️ Protected Database Deletion**: Permanent file deletion requires typing `"DELETE DATABASE"` in a confirmation modal to safeguard against accidental data loss.
 - **🔄 Workspace State Persistence**: Automatically remembers and reopens the last opened database on launch.
-- **📤 Export Capabilities**: 1-click export to standard CSV format including custom columns and structured service history columns (Problem, Root Cause, Action Taken, Parts Consumed, Note Type).
+- **📤 Export Capabilities**: 1-click export to standard CSV format including Category, Device Type, Current State, custom columns, and structured service history columns.
 - **🎨 Cosmic Dark Workstation Aesthetic**: High-DPI scaling, custom Tkinter and TTK clam theme, custom multi-resolution icon (`.ico`), and activity console.
 
 ---
@@ -82,7 +92,7 @@ Databases are saved by default to `orbit_database.json` in the application direc
 ```json
 {
   "app_name": "OrbitTracker",
-  "version": "1.0.3-dev",
+  "version": "1.1.0-dev",
   "last_modified": "2026-09-14 20:30:00",
   "queue_prefix": "Q-",
   "next_queue_id": 4,
@@ -103,6 +113,8 @@ Databases are saved by default to `orbit_database.json` in the application direc
       "make_and_model": "Flowserve HPX-600",
       "status": "Active",
       "department": "Cryogenics & Propulsion",
+      "category": "Cryogenics & Propulsion",
+      "device_type": "Booster Pump",
       "custom_fields": {
         "col_a81f3": "Bay 4 West"
       },
@@ -111,6 +123,10 @@ Databases are saved by default to `orbit_database.json` in the application direc
           "id": "4b219cf0",
           "timestamp": "2026-09-14 14:15:00",
           "note_type": "maintenance",
+          "work_status": "Done",
+          "severity": "Routine",
+          "service_type": "Corrective Repair",
+          "technician": "M. Song",
           "problem": "Seal leakage detected during high-pressure run",
           "root_cause": "Thermal cycling degraded elastomer O-ring",
           "action_taken": "Replaced mechanical seal assembly and re-torqued casing bolts",
